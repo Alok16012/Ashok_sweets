@@ -620,6 +620,16 @@ function App() {
           )}
         </div>
       </header>
+      <section className="mobileOrderBar" aria-label="Delivery and search">
+        <button className="mobileLocation" onClick={() => nav("market")}>
+          <MapPin size={18} />
+          <span><b>Delivery in Dombivli</b><small>West & East stores · 30–45 min</small></span>
+          <ChevronRight size={18} />
+        </button>
+        <button className="mobileSearch" onClick={() => setPalette(true)}>
+          <Search size={18} /> <span>Search for laddoo, kaju katli, gift boxes…</span>
+        </button>
+      </section>
       {view === "discover" && (
         <main>
           <section
