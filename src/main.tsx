@@ -462,6 +462,11 @@ function App() {
     [products],
   );
   useEffect(() => {
+    if (!toast) return;
+    const timeout = window.setTimeout(() => setToast(""), 2800);
+    return () => window.clearTimeout(timeout);
+  }, [toast]);
+  useEffect(() => {
     const f = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === "k") {
         e.preventDefault();
@@ -620,7 +625,7 @@ function App() {
           )}
         </div>
       </header>
-      <section className="mobileOrderBar" aria-label="Delivery and search">
+      {(view === "discover" || view === "market") && <section className="mobileOrderBar" aria-label="Delivery and search">
         <button className="mobileLocation" onClick={() => nav("market")}>
           <MapPin size={18} />
           <span><b>Delivery in Dombivli</b><small>West & East stores · 30–45 min</small></span>
@@ -629,7 +634,7 @@ function App() {
         <button className="mobileSearch" onClick={() => setPalette(true)}>
           <Search size={18} /> <span>Search for laddoo, kaju katli, gift boxes…</span>
         </button>
-      </section>
+      </section>}
       {view === "discover" && (
         <main>
           <section
@@ -930,6 +935,7 @@ function App() {
           <div className="tabs">
             {(["all", "heritage", "gifting"] as const).map((t) => (
               <button
+                key={t}
                 className={tab === t ? "on" : ""}
                 onClick={() => setTab(t)}
               >
@@ -1052,24 +1058,25 @@ function App() {
       <ComplianceFooter onNavigate={nav} isAdmin={isAdmin} />
       <FloatingAssistants />
       <nav className="mobileNav">
-        <button onClick={() => nav("discover")}>
+        <button className={view === "discover" ? "active" : ""} onClick={() => nav("discover")} aria-label="Discover">
           <LayoutGrid />
-          Discover
+          <span>Home</span>
         </button>
-        <button onClick={() => nav("market")}>
+        <button className={view === "market" ? "active" : ""} onClick={() => nav("market")} aria-label="Search sweets">
           <Search />
-          Search
+          <span>Search</span>
         </button>
-        <button onClick={() => nav("cart")} className="mobileplus" aria-label="Cart">
+        <button onClick={() => nav("cart")} className={`mobileplus ${view === "cart" || view === "checkout" ? "active" : ""}`} aria-label={`Cart with ${cartCount} items`}>
           <ShoppingCart />
+          {cartCount > 0 && <b className="dockBadge">{cartCount}</b>}
         </button>
-        <button>
+        <button onClick={() => document.querySelector<HTMLButtonElement>(".bot-float")?.click()} aria-label="Open sweet guide">
           <MessageCircle />
-          Messages
+          <span>Help</span>
         </button>
-        <button onClick={() => nav("dashboard")}>
+        <button className={view === "dashboard" ? "active" : ""} onClick={() => nav("dashboard")} aria-label="Your account">
           <User />
-          You
+          <span>You</span>
         </button>
       </nav>
       {palette && (
@@ -2253,7 +2260,7 @@ function FloatingAssistants() {
           <MessageCircle />
           <span>WhatsApp</span>
         </a>
-        <button className="bot-float" onClick={() => setOpen((v) => !v)}>
+        <button className="bot-float" aria-label="Open Ashok Sweet Guide" onClick={() => setOpen((v) => !v)}>
           <Sparkles />
           <span>Sweet guide</span>
         </button>
@@ -2266,7 +2273,7 @@ function FloatingAssistants() {
               <b>Ashok Sweet Guide</b>
               <small>Website assistant · online</small>
             </span>
-            <button onClick={() => setOpen(false)}>
+            <button aria-label="Close sweet guide" onClick={() => setOpen(false)}>
               <X />
             </button>
           </header>
@@ -2287,7 +2294,7 @@ function FloatingAssistants() {
               onKeyDown={(e) => e.key === "Enter" && send()}
               placeholder="Ask about sweets, licences…"
             />
-            <button onClick={send}>
+            <button aria-label="Send message" onClick={send}>
               <Send />
             </button>
           </div>
