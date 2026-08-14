@@ -625,7 +625,7 @@ function App() {
           )}
         </div>
       </header>
-      {(view === "discover" || view === "market") && <section className="mobileOrderBar" aria-label="Delivery and search">
+      {view === "market" && <section className="mobileOrderBar" aria-label="Delivery and search">
         <button className="mobileLocation" onClick={() => nav("market")}>
           <MapPin size={18} />
           <span><b>Delivery in Dombivli</b><small>West & East stores · 30–45 min</small></span>
@@ -1087,8 +1087,16 @@ function App() {
               <input
                 autoFocus
                 placeholder="Search Ashok Sweets or type a command…"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    setPalette(false);
+                    nav("market");
+                  }
+                }}
               />
-              <button onClick={() => setPalette(false)}>
+              <button aria-label="Close search" onClick={() => setPalette(false)}>
                 <X />
               </button>
             </div>

@@ -3682,9 +3682,10 @@ header {
   .mobileSearch span { color:#857775; font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .marketRibbon { display:none; }
   .intro {
-    min-height:auto;
+    min-height:calc(100svh - 60px);
     padding:38px 20px 28px;
-    display:block;
+    display:flex;
+    align-items:center;
     background:linear-gradient(145deg,#fffaf3 0 70%,#f5e2d7 70%);
   }
   .intro::before { width:62px; height:62px; left:auto; right:12%; top:10%; opacity:.55; }
@@ -3809,9 +3810,12 @@ header {
   .sticky-actions { display:none; }
   .sticky-actions > a, .sticky-actions > button { width:46px; height:46px; border-radius:16px; }
   .bot-panel {
+    left:12px;
     right:12px;
     bottom:92px;
-    width:calc(100vw - 24px);
+    width:auto;
+    max-width:390px;
+    margin-inline:auto;
     height:min(560px,calc(100dvh - 116px));
     border-radius:24px;
     overflow:hidden;
