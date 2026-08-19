@@ -44,6 +44,7 @@ import {
   ArrowDownUp,
 } from "lucide-react";
 import SweetGuide from "./components/SweetGuide";
+import catalogue from "./catalogue.json";
 import "./styles.css";
 
 type Item = {
@@ -62,6 +63,7 @@ type Item = {
   image: string;
   note: string;
   expiry: string;
+  stockKnown?: boolean;
   match?: string;
 };
 type CartLine = { item: Item; qty: number };
@@ -76,9 +78,9 @@ const SORTS: { key: SortKey; label: string }[] = [
 
 /** Craving chips on the home rail map to a search term, not a category. */
 const CRAVINGS = [
-  "Laddoo",
+  "Ladu",
   "Kaju katli",
-  "Barfi",
+  "Burfi",
   "Halwa",
   "Peda",
   "Gift boxes",
@@ -99,254 +101,28 @@ declare global {
     Razorpay?: new (options: Record<string, unknown>) => { open: () => void };
   }
 }
-const featuredItems: Item[] = [
-  {
-    id: 1,
-    kind: "supply",
-    title: "Kesar pista festive box",
-    category: "Premium mithai",
-    available: 80,
-    requested: 37,
-    unit: "boxes",
-    price: 680,
-    place: "Dombivli West",
-    distance: "1.2 km",
-    seller: "Nakhye’s Ashok Sweets",
-    rating: "98% fulfilment",
-    image:
-      "https://static.wixstatic.com/media/57b89c_9a4a7311b25a41439084b657062603aa~mv2.jpg/v1/fill/w_980,h_1307,al_c,q_85/57b89c_9a4a7311b25a41439084b657062603aa~mv2.jpg",
-    note: "Made this morning · 12 handcrafted pieces",
-    expiry: "best before 4 days",
-  },
-  {
-    id: 2,
-    kind: "supply",
-    title: "Wedding favour mithai boxes",
-    category: "Wedding orders",
-    available: 42,
-    requested: 120,
-    unit: "boxes",
-    price: 450,
-    place: "Dombivli East",
-    distance: "3.4 km",
-    seller: "Nakhye’s Ashok Sweets",
-    rating: "34 completed orders",
-    image:
-      "https://weddingsutra.com/images/Vendor_Images/Wedding-Favors-%26-Gifts/meetha-by-radisson/meetha-by-radisson-03.jpg",
-    note: "Nine-piece boxes · rose and pistachio preferred",
-    expiry: "needed by 18 Aug",
-    match: "Strong match",
-  },
-  {
-    id: 3,
-    kind: "supply",
-    title: "Motichoor laddoo · desi ghee",
-    category: "Traditional favourites",
-    available: 48,
-    requested: 31,
-    unit: "boxes",
-    price: 520,
-    place: "Dombivli West",
-    distance: "2.1 km",
-    seller: "Nakhye’s Ashok Sweets",
-    rating: "Four-generation maker",
-    image: "https://media.pri.org/s3fs-public/story/images/Mithai.JPG",
-    note: "Six pieces · pure desi ghee · no preservatives",
-    expiry: "made today",
-  },
-  {
-    id: 4,
-    kind: "supply",
-    title: "Rose kaju katli collection",
-    category: "Contemporary mithai",
-    available: 36,
-    requested: 8,
-    unit: "boxes",
-    price: 790,
-    place: "Dombivli East",
-    distance: "4.8 km",
-    seller: "Nakhye’s Ashok Sweets",
-    rating: "100% fulfilment",
-    image:
-      "https://weddingsutra.com/images/Vendor_Images/Wedding-Favors-%26-Gifts/kesar-sweets/kesar-sweets-07.jpg",
-    note: "Rose petal, classic and pistachio · 18 pieces",
-    expiry: "best before 7 days",
-  },
-  {
-    id: 5,
-    kind: "supply",
-    title: "Corporate Diwali hampers",
-    category: "Bulk gifting",
-    available: 30,
-    requested: 75,
-    unit: "hampers",
-    price: 1200,
-    place: "Dombivli",
-    distance: "6.2 km",
-    seller: "Nakhye’s Ashok Sweets",
-    rating: "Usually replies in 12 min",
-    image:
-      "https://cdn.shopify.com/s/files/1/0895/2489/6047/files/5_collections.webp?v=1756896780",
-    note: "Custom sleeve and message card required",
-    expiry: "needed by 30 Sep",
-    match: "Possible match",
-  },
-];
+/* The generated placeholder catalogue that used to live here (featuredItems,
+   sweetNames, sweetImages and the legacyItems it built) went unused once
+   `items` began reading the real catalogue, but still shipped in the bundle. */
 
-const sweetNames = [
-  "Silao Khaja",
-  "Gaya Tilkut",
-  "Chhath Thekua",
-  "Harnaut Balushahi",
-  "Bihari Anarsa",
-  "Parwal Ki Mithai",
-  "Laung Lata",
-  "Kasar Laddoo",
-  "Chura Lai",
-  "Makhana Kheer",
-  "Malpua Rabri",
-  "Pedukia",
-  "Khoya Belgrami",
-  "Laktho",
-  "Khurma",
-  "Gaja",
-  "Khurchan",
-  "Rasia Kheer",
-  "Doodh Pitha",
-  "Gud Pua",
-  "Kala Til Laddoo",
-  "White Til Laddoo",
-  "Murmura Lai",
-  "Chana Murki",
-  "Gur Ki Patti",
-  "Motichoor Laddoo",
-  "Besan Laddoo",
-  "Boondi Laddoo",
-  "Gond Laddoo",
-  "Methi Laddoo",
-  "Atta Laddoo",
-  "Coconut Laddoo",
-  "Dry Fruit Laddoo",
-  "Kaju Katli",
-  "Kesar Kaju Katli",
-  "Rose Kaju Katli",
-  "Pista Barfi",
-  "Badam Barfi",
-  "Milk Cake",
-  "Kalakand",
-  "Malai Peda",
-  "Kesar Peda",
-  "Mathura Peda",
-  "Dharwad Peda",
-  "Chocolate Peda",
-  "Gulab Jamun",
-  "Kala Jamun",
-  "Dry Jamun",
-  "Rasgulla",
-  "Rajbhog",
-  "Rasmalai",
-  "Kesar Rasmalai",
-  "Cham Cham",
-  "Malai Cham Cham",
-  "Sandesh",
-  "Kesar Sandesh",
-  "Nolen Gur Sandesh",
-  "Kheer Kadam",
-  "Chhena Toast",
-  "Chhena Murki",
-  "Pantua",
-  "Langcha",
-  "Ledikeni",
-  "Jalebi",
-  "Kesar Jalebi",
-  "Imarti",
-  "Rabri Jalebi",
-  "Shahi Tukda",
-  "Moong Dal Halwa",
-  "Gajar Halwa",
-  "Sooji Halwa",
-  "Badam Halwa",
-  "Sohan Halwa",
-  "Habshi Halwa",
-  "Karachi Halwa",
-  "Patisa",
-  "Soan Papdi",
-  "Mysore Pak",
-  "Ghewar",
-  "Malai Ghewar",
-  "Kesar Ghewar",
-  "Gujiya",
-  "Chandrakala",
-  "Karanji",
-  "Modak",
-  "Mawa Modak",
-  "Petha",
-  "Angoori Petha",
-  "Kesar Petha",
-  "Coconut Barfi",
-  "Mawa Barfi",
-  "Dodha Barfi",
-  "Khoya Roll",
-  "Kaju Roll",
-  "Pista Roll",
-  "Badam Pak",
-  "Dry Fruit Pak",
-  "Mango Barfi",
-  "Rose Barfi",
-  "Orange Barfi",
-  "Pan Petha",
-  "Baklava Mithai",
-  "Rose Truffle Laddoo",
-  "Paan Laddoo",
-  "Sugar-free Kaju Katli",
-  "Jaggery Sandesh",
-  "Wedding Assorted Box",
-  "Diwali Heritage Hamper",
-  "Corporate Mithai Box",
-  "Chhath Prasad Box",
-];
-const sweetImages = [
-  "https://cf-img-a-in.tosshub.com/sites/visualstory/wp/2023/10/mithaii.jpg?size=%2A%3A900",
-  "https://images.slurrp.com/webstories/wp-content/uploads/2023/10/13183954/Tilkut.webp",
-  "https://media.pri.org/s3fs-public/story/images/Mithai.JPG",
-  "https://images.tv9bangla.com/wp-content/uploads/2024/07/famous-sweets.jpeg",
-  "https://chhattisgarhdarpan.com/uploads/loveyoulife/1692676999ngali-mithai.jpg",
-  "https://amritsweets.uk/images/sw.png",
-  "https://weddingsutra.com/images/Vendor_Images/Wedding-Favors-%26-Gifts/kesar-sweets/kesar-sweets-07.jpg",
-  "https://static.wixstatic.com/media/57b89c_9a4a7311b25a41439084b657062603aa~mv2.jpg/v1/fill/w_980,h_1307,al_c,q_85/57b89c_9a4a7311b25a41439084b657062603aa~mv2.jpg",
-];
-const items: Item[] = [
-  ...featuredItems,
-  ...sweetNames.slice(5).map((title, index) => ({
-    id: index + 6,
-    kind: "supply" as const,
-    title,
-    category:
-      index < 20
-        ? "Bihar heritage"
-        : index < 55
-          ? "Everyday favourites"
-          : index < 82
-            ? "Celebration sweets"
-            : "Premium gifting",
-    available: 12 + ((index * 7) % 76),
-    requested: 4 + ((index * 11) % 39),
-    unit: index % 4 === 0 ? "kg" : "boxes",
-    price: 240 + ((index * 65) % 760),
-    place: index % 2 ? "Dombivli East" : "Dombivli West",
-    distance: `${(0.8 + (index % 12) * 0.6).toFixed(1)} km`,
-    seller: "Nakhye’s Ashok Sweets",
-    rating:
-      index % 3 === 0 ? "Identity verified" : `${94 + (index % 6)}% fulfilment`,
-    image: sweetImages[index % sweetImages.length],
-    note:
-      index < 20
-        ? "Regional recipe · made in Bihar"
-        : "Fresh batch · vegetarian",
-    expiry: index % 3 === 0 ? "made today" : "best before 5 days",
-    match: undefined,
-  })),
-];
+const items: Item[] = catalogue.map((product) => ({
+  id: product.id,
+  kind: "supply" as const,
+  title: product.title,
+  category: product.category,
+  available: 99,
+  requested: 0,
+  unit: product.unit,
+  price: product.mrp,
+  place: "Dombivli East & West",
+  distance: "Both stores",
+  seller: "Nakhye’s Ashok Sweets",
+  rating: "Catalogue price · 14 Aug 2026",
+  image: product.image,
+  note: `MRP ₹${product.mrp}/${product.unit} · confirm availability with store`,
+  expiry: "Freshness details on pack",
+  stockKnown: false,
+}));
 
 function Balance({
   item,
@@ -357,6 +133,17 @@ function Balance({
   large?: boolean;
   preview?: number;
 }) {
+  if (item.stockKnown === false) {
+    return (
+      <div className={"balance " + (large ? "large" : "")} aria-label="Availability confirmed by the store">
+        <div className="balance-labels">
+          <span><b>Store availability</b></span>
+          <span>Confirm at checkout</span>
+        </div>
+        <div className="track"><i style={{ width: "100%" }} /></div>
+      </div>
+    );
+  }
   const value = preview ?? item.requested,
     total = item.available + item.requested,
     supply = Math.max(
@@ -399,7 +186,7 @@ const Card = memo(function Card({
   onAdd: () => void;
 }) {
   const low =
-    item.kind === "supply" &&
+    item.stockKnown !== false && item.kind === "supply" &&
     item.available / (item.available + item.requested) < 0.3;
   return (
     <article
@@ -472,7 +259,7 @@ function App() {
   const [products, setProducts] = useState<Item[]>(items);
   const [cart, setCart] = useState<CartLine[]>([]);
   const [selected, setSelected] = useState(items[0]);
-  const [qty, setQty] = useState(12);
+  const [qty, setQty] = useState(1);
   const [saved, setSaved] = useState<number[]>([4]);
   const [toast, setToast] = useState("");
   const [query, setQuery] = useState("");
@@ -486,9 +273,10 @@ function App() {
   const [processing, setProcessing] = useState(false);
   useEffect(() => {
     const savedCart = localStorage.getItem("ashok-cart");
-    const savedProducts = localStorage.getItem("ashok-products");
+    const savedProducts = localStorage.getItem("ashok-products-v2");
     if (savedCart) setCart(JSON.parse(savedCart));
     if (savedProducts) setProducts(JSON.parse(savedProducts));
+    localStorage.removeItem("ashok-products");
   }, []);
   useEffect(
     () => localStorage.setItem("ashok-cart", JSON.stringify(cart)),
@@ -499,7 +287,7 @@ function App() {
   // slot and collapse bursts into one write.
   useEffect(() => {
     const write = () =>
-      localStorage.setItem("ashok-products", JSON.stringify(products));
+      localStorage.setItem("ashok-products-v2", JSON.stringify(products));
     const idle = window.requestIdleCallback;
     if (idle) {
       const handle = idle(write, { timeout: 1000 });
@@ -599,8 +387,8 @@ function App() {
     const result = products.filter((i) => {
       const inTab =
         tab === "all" ||
-        (tab === "heritage" && /bihar|traditional/i.test(i.category)) ||
-        (tab === "gifting" && /gift|wedding|bulk/i.test(i.category));
+        (tab === "heritage" && /bangali|ladu|pedha|khaja/i.test(i.category)) ||
+        (tab === "gifting" && /kaju|burfi|other sweets/i.test(i.category));
       const inCategory = category === "all" || i.category === category;
       const matches =
         !term ||
@@ -668,7 +456,7 @@ function App() {
   const open = (i: Item) => {
     transition(() => {
       setSelected(i);
-      setQty(Math.min(12, i.available));
+      setQty(1);
       setRequested(false);
       setProcessing(false);
       setView("detail");
@@ -783,13 +571,13 @@ function App() {
           >
             <div>
               <span>FRESH IN DOMBIVLI</span>
-              <b>418 mithai boxes available</b>
+              <b>{items.length} catalogue products</b>
               <i>✦</i>
-              <b>267 boxes wanted</b>
+              <b>{new Set(items.map((item) => item.category)).size} sweet &amp; snack categories</b>
               <i>✦</i>
-              <b>46 sweet exchanges today</b>
+              <b>Dombivli East &amp; West</b>
               <i>✦</i>
-              <b>12 wedding-order matches</b>
+              <b>Prices updated 14 Aug 2026</b>
             </div>
           </section>
           <section className="intro">
@@ -829,22 +617,22 @@ function App() {
                 decoding="async"
               />
               <div className="heroTicket">
-                <span>MEHER MITHAI · 1.2 KM</span>
+                <span>{items[0].category.toUpperCase()} · BOTH STORES</span>
                 <h2>
-                  80<small>boxes</small>
+                  ₹{items[0].price}<small>/{items[0].unit}</small>
                 </h2>
-                <p>kesar pista collection</p>
+                <p>{items[0].title}</p>
                 <Balance item={items[0]} />
                 <button className="quantum-btn" onClick={() => open(items[0])}>
-                  Choose a box <ArrowUpRight />
+                  View product <ArrowUpRight />
                 </button>
               </div>
               <div className="demandStamp">
-                <b>120</b>
+                <b>{items.length}</b>
                 <span>
-                  wedding boxes
+                  real catalogue items
                   <br />
-                  wanted nearby
+                  ready to explore
                 </span>
               </div>
             </div>
@@ -918,7 +706,7 @@ function App() {
                   <Balance item={items[0]} large />
                   <div className="featurebottom">
                     <div>
-                      <b>₹680</b> / box
+                      <b>₹{items[0].price}</b> / {items[0].unit}
                     </div>
                     <button className="quantum-btn">
                       Choose quantity <ChevronRight size={18} />
@@ -979,13 +767,13 @@ function App() {
             </div>
             <div className="demandrows">
               {items
-                .filter((i) => /gifting|wedding/i.test(i.category))
+                .filter((i) => /kaju|burfi/i.test(i.category))
                 .slice(0, 4)
                 .map((i) => (
                   <button key={i.id} onClick={() => open(i)}>
                     <span className="dnumber">
-                      {i.requested}
-                      <small>{i.unit}</small>
+                      ₹{i.price}
+                      <small>/{i.unit}</small>
                     </span>
                     <span>
                       <b>{i.title}</b>
@@ -1011,16 +799,16 @@ function App() {
             </div>
             <ol>
               <li>
-                <b>31 boxes</b> of motichoor laddoo were reserved{" "}
-                <time>14 min ago</time>
+                <b>{items.length} products</b> imported from the current catalogue{" "}
+                <time>14 Aug 2026</time>
               </li>
               <li>
-                <b>New wedding demand</b> for 120 favour boxes{" "}
-                <time>38 min ago</time>
+                <b>{new Set(items.map((item) => item.category)).size} categories</b> cover sweets, snacks and chaat{" "}
+                <time>current range</time>
               </li>
               <li>
-                <b>Rose kaju katli</b> now has 36 boxes available{" "}
-                <time>2 hr ago</time>
+                <b>MRP pricing</b> is shown directly on every product{" "}
+                <time>availability confirmed by store</time>
               </li>
             </ol>
           </section>
@@ -1431,10 +1219,10 @@ function Detail({
           </div>
           <div className="quantity">
             <div className="qhead">
-              <span>AVAILABLE TO REQUEST</span>
+              <span>{item.stockKnown === false ? "CATALOGUE PRICE" : "AVAILABLE TO REQUEST"}</span>
               <b>
-                {item.available}
-                <small>{item.unit}</small>
+                {item.stockKnown === false ? `₹${item.price}` : item.available}
+                <small>{item.stockKnown === false ? `/${item.unit}` : item.unit}</small>
               </b>
             </div>
             <Balance item={item} large preview={item.requested + qty} />
@@ -1478,8 +1266,9 @@ function Detail({
               </span>
             </div>
             <p className="after">
-              <i /> {item.available - qty} {item.unit} will remain after your
-              request
+              <i /> {item.stockKnown === false
+                ? "Final availability is confirmed by the store."
+                : `${item.available - qty} ${item.unit} will remain after your request`}
             </p>
             <div className="commerce-actions">
               <button className="add-cart quantum-btn" onClick={addToCart}>
@@ -2208,7 +1997,7 @@ function AdminPanel({
       category: "New product",
       available: 25,
       requested: 0,
-      image: sweetImages[0],
+      image: "/products/burfi.jpg",
       seller: "Nakhye’s Ashok Sweets",
       place: "Dombivli",
       distance: "In store",
