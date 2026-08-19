@@ -1,4 +1,10 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, {
+  memo,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import { createRoot } from "react-dom/client";
 import {
   Search,
@@ -32,7 +38,12 @@ import {
   Store,
   Recycle,
   Leaf,
+  Star,
+  Truck,
+  ChevronDown,
+  ArrowDownUp,
 } from "lucide-react";
+import SweetGuide from "./components/SweetGuide";
 import "./styles.css";
 
 type Item = {
@@ -54,6 +65,24 @@ type Item = {
   match?: string;
 };
 type CartLine = { item: Item; qty: number };
+type SortKey = "relevance" | "price-low" | "price-high" | "availability";
+
+const SORTS: { key: SortKey; label: string }[] = [
+  { key: "relevance", label: "Relevance" },
+  { key: "price-low", label: "Price: low to high" },
+  { key: "price-high", label: "Price: high to low" },
+  { key: "availability", label: "Most available" },
+];
+
+/** Craving chips on the home rail map to a search term, not a category. */
+const CRAVINGS = [
+  "Laddoo",
+  "Kaju katli",
+  "Barfi",
+  "Halwa",
+  "Peda",
+  "Gift boxes",
+];
 type SiteView =
   | "discover"
   | "market"
@@ -356,7 +385,7 @@ function Balance({
   );
 }
 
-function Card({
+const Card = memo(function Card({
   item,
   onOpen,
   saved,
@@ -383,6 +412,10 @@ function Card({
         <img
           src={item.image}
           alt=""
+          loading="lazy"
+          decoding="async"
+          width={420}
+          height={300}
           style={{ viewTransitionName: `sweet-${item.id}` }}
         />
         <span className="kind">
@@ -429,7 +462,7 @@ function Card({
       </div>
     </article>
   );
-}
+});
 
 function App() {
   const [view, setView] = useState<SiteView>("discover");
@@ -444,6 +477,10 @@ function App() {
   const [toast, setToast] = useState("");
   const [query, setQuery] = useState("");
   const [tab, setTab] = useState<"all" | "heritage" | "gifting">("all");
+  const [category, setCategory] = useState("all");
+  const [sort, setSort] = useState<SortKey>("relevance");
+  const [sortOpen, setSortOpen] = useState(false);
+  const [visible, setVisible] = useState(24);
   const [palette, setPalette] = useState(false);
   const [requested, setRequested] = useState(false);
   const [processing, setProcessing] = useState(false);
@@ -457,10 +494,20 @@ function App() {
     () => localStorage.setItem("ashok-cart", JSON.stringify(cart)),
     [cart],
   );
-  useEffect(
-    () => localStorage.setItem("ashok-products", JSON.stringify(products)),
-    [products],
-  );
+  // The catalogue is ~110 records; serialising it synchronously on every
+  // change blocks the main thread during admin edits. Defer it to an idle
+  // slot and collapse bursts into one write.
+  useEffect(() => {
+    const write = () =>
+      localStorage.setItem("ashok-products", JSON.stringify(products));
+    const idle = window.requestIdleCallback;
+    if (idle) {
+      const handle = idle(write, { timeout: 1000 });
+      return () => window.cancelIdleCallback?.(handle);
+    }
+    const timeout = window.setTimeout(write, 400);
+    return () => window.clearTimeout(timeout);
+  }, [products]);
   useEffect(() => {
     if (!toast) return;
     const timeout = window.setTimeout(() => setToast(""), 2800);
@@ -480,20 +527,41 @@ function App() {
     addEventListener("keydown", f);
     return () => removeEventListener("keydown", f);
   }, [view]);
+  // Magnetic button effect. Purely decorative, so it is skipped entirely on
+  // touch devices and for reduced-motion users, and the remaining work is
+  // batched into one rAF per frame instead of running on every pointer event.
   useEffect(() => {
+    const decorative =
+      matchMedia("(hover: hover) and (pointer: fine)").matches &&
+      !matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (!decorative) return;
+
+    let frame = 0;
+    let pending: { target: HTMLElement; x: number; y: number } | null = null;
+
+    const paint = () => {
+      frame = 0;
+      if (!pending) return;
+      const { target, x, y } = pending;
+      pending = null;
+      const rect = target.getBoundingClientRect();
+      const px = ((x - rect.left) / rect.width) * 100;
+      const py = ((y - rect.top) / rect.height) * 100;
+      target.style.setProperty("--mouse-x", `${px}%`);
+      target.style.setProperty("--mouse-y", `${py}%`);
+      target.style.setProperty("--pull-x", `${(px - 50) * 0.025}px`);
+      target.style.setProperty("--pull-y", `${(py - 50) * 0.025}px`);
+    };
+
     const move = (event: PointerEvent) => {
       const target = (event.target as HTMLElement).closest<HTMLElement>(
         ".quantum-btn",
       );
       if (!target) return;
-      const rect = target.getBoundingClientRect();
-      const x = ((event.clientX - rect.left) / rect.width) * 100;
-      const y = ((event.clientY - rect.top) / rect.height) * 100;
-      target.style.setProperty("--mouse-x", `${x}%`);
-      target.style.setProperty("--mouse-y", `${y}%`);
-      target.style.setProperty("--pull-x", `${(x - 50) * 0.025}px`);
-      target.style.setProperty("--pull-y", `${(y - 50) * 0.025}px`);
+      pending = { target, x: event.clientX, y: event.clientY };
+      if (!frame) frame = requestAnimationFrame(paint);
     };
+
     const leave = (event: PointerEvent) => {
       const target = (event.target as HTMLElement).closest<HTMLElement>(
         ".quantum-btn",
@@ -506,24 +574,67 @@ function App() {
         target.style.removeProperty("--pull-y");
       }
     };
-    addEventListener("pointermove", move);
-    addEventListener("pointerout", leave);
+
+    addEventListener("pointermove", move, { passive: true });
+    addEventListener("pointerout", leave, { passive: true });
     return () => {
+      if (frame) cancelAnimationFrame(frame);
       removeEventListener("pointermove", move);
       removeEventListener("pointerout", leave);
     };
   }, []);
-  const filtered = useMemo(
-    () =>
-      products.filter(
-        (i) =>
-          (tab === "all" ||
-            (tab === "heritage" && /bihar|traditional/i.test(i.category)) ||
-            (tab === "gifting" && /gift|wedding|bulk/i.test(i.category))) &&
-          i.title.toLowerCase().includes(query.toLowerCase()),
-      ),
-    [tab, query, products],
+  // Category chips are built from the catalogue itself, so adding a product in
+  // the admin panel surfaces its category without touching this list.
+  const categories = useMemo(
+    () => ["all", ...Array.from(new Set(products.map((p) => p.category)))],
+    [products],
   );
+
+  // Keep typing responsive: React renders the keystroke first and re-filters
+  // the 110-item catalogue at a lower priority.
+  const deferredQuery = useDeferredValue(query);
+
+  const filtered = useMemo(() => {
+    const term = deferredQuery.trim().toLowerCase();
+    const result = products.filter((i) => {
+      const inTab =
+        tab === "all" ||
+        (tab === "heritage" && /bihar|traditional/i.test(i.category)) ||
+        (tab === "gifting" && /gift|wedding|bulk/i.test(i.category));
+      const inCategory = category === "all" || i.category === category;
+      const matches =
+        !term ||
+        i.title.toLowerCase().includes(term) ||
+        i.category.toLowerCase().includes(term);
+      return inTab && inCategory && matches;
+    });
+
+    switch (sort) {
+      case "price-low":
+        return result.sort((a, b) => a.price - b.price);
+      case "price-high":
+        return result.sort((a, b) => b.price - a.price);
+      case "availability":
+        return result.sort((a, b) => b.available - a.available);
+      default:
+        return result;
+    }
+  }, [tab, category, sort, deferredQuery, products]);
+
+  // Render the grid in pages so a cold load paints 24 cards, not 110.
+  useEffect(() => setVisible(24), [tab, category, sort, deferredQuery]);
+  const shown = useMemo(
+    () => filtered.slice(0, visible),
+    [filtered, visible],
+  );
+
+  /** Jump to the catalogue with a search term already applied. */
+  const searchFor = (term: string) => {
+    setQuery(term);
+    setCategory("all");
+    setTab("all");
+    nav("market");
+  };
   const addCart = (item: Item, amount = 1) => {
     setCart((current) => {
       const existing = current.find((line) => line.item.id === item.id);
@@ -540,10 +651,19 @@ function App() {
   const cartCount = cart.reduce((sum, line) => sum + line.qty, 0);
   const transition = (update: () => void) => {
     const doc = document as Document & {
-      startViewTransition?: (callback: () => void) => void;
+      startViewTransition?: (callback: () => void) => {
+        finished: Promise<void>;
+      };
     };
-    if (doc.startViewTransition) doc.startViewTransition(update);
-    else update();
+    // A transition started while the document is hidden — or superseded by
+    // a second navigation — rejects `finished`. That is expected, so it is
+    // swallowed rather than left as an unhandled rejection. Skipping the
+    // transition entirely when hidden also avoids the wasted snapshot.
+    if (!doc.startViewTransition || document.visibilityState === "hidden") {
+      update();
+      return;
+    }
+    doc.startViewTransition(update).finished.catch(() => {});
   };
   const open = (i: Item) => {
     transition(() => {
@@ -578,7 +698,14 @@ function App() {
           onClick={() => nav("discover")}
           aria-label="Nakhye’s Ashok Sweets home"
         >
-          <img src="/brand/ashok-sweets-mark.jpg" alt="Nakhye’s Ashok Sweets" />
+          <img
+            src="/brand/ashok-sweets-mark.jpg"
+            alt="Nakhye’s Ashok Sweets"
+            width={205}
+            height={76}
+            fetchPriority="high"
+            decoding="async"
+          />
         </button>
         <nav aria-label="Primary">
           <button
@@ -625,16 +752,29 @@ function App() {
           )}
         </div>
       </header>
-      {view === "market" && <section className="mobileOrderBar" aria-label="Delivery and search">
-        <button className="mobileLocation" onClick={() => nav("market")}>
-          <MapPin size={18} />
-          <span><b>Delivery in Dombivli</b><small>West & East stores · 30–45 min</small></span>
-          <ChevronRight size={18} />
-        </button>
-        <button className="mobileSearch" onClick={() => setPalette(true)}>
-          <Search size={18} /> <span>Search for laddoo, kaju katli, gift boxes…</span>
-        </button>
-      </section>}
+      {(view === "discover" || view === "market") && (
+        <section className="mobileOrderBar" aria-label="Delivery and search">
+          <div className="mobileLocation">
+            <MapPin size={18} />
+            <span>
+              <b>Delivery in Dombivli</b>
+              <small>West &amp; East stores · 30–45 min</small>
+            </span>
+            <Truck size={17} />
+          </div>
+          <button className="mobileSearch" onClick={() => setPalette(true)}>
+            <Search size={18} />{" "}
+            <span>Search for laddoo, kaju katli, gift boxes…</span>
+          </button>
+          <div className="mobileCravings">
+            {CRAVINGS.map((craving) => (
+              <button key={craving} onClick={() => searchFor(craving)}>
+                {craving}
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
       {view === "discover" && (
         <main>
           <section
@@ -683,6 +823,10 @@ function App() {
               <img
                 src={items[0].image}
                 alt="Premium Indian mithai box available nearby"
+                width={720}
+                height={900}
+                fetchPriority="high"
+                decoding="async"
               />
               <div className="heroTicket">
                 <span>MEHER MITHAI · 1.2 KM</span>
@@ -707,15 +851,14 @@ function App() {
           </section>
           <section className="categoryRail">
             <span>Shop by craving</span>
-            <button onClick={() => nav("market")}>LADDOO</button>
-            <i>✦</i>
-            <button onClick={() => nav("market")}>KAJU KATLI</button>
-            <i>✦</i>
-            <button onClick={() => nav("market")}>BENGALI</button>
-            <i>✦</i>
-            <button onClick={() => nav("market")}>GIFT BOXES</button>
-            <i>✦</i>
-            <button onClick={() => nav("market")}>WEDDINGS</button>
+            {CRAVINGS.map((craving, index) => (
+              <React.Fragment key={craving}>
+                {index > 0 && <i>✦</i>}
+                <button onClick={() => searchFor(craving)}>
+                  {craving.toUpperCase()}
+                </button>
+              </React.Fragment>
+            ))}
           </section>
           <section className="sweetAtlas">
             <div className="atlasIntro">
@@ -744,8 +887,7 @@ function App() {
                   <img
                     src={sweet.image}
                     alt={sweet.title}
-                    style={{ viewTransitionName: `sweet-${sweet.id}` }}
-                  />
+                    style={{ viewTransitionName: `sweet-${sweet.id}` }} loading="lazy" decoding="async" />
                   <span>
                     <b>{String(index + 1).padStart(2, "0")}</b>
                     {sweet.title}
@@ -768,8 +910,7 @@ function App() {
               <div className="feature" onClick={() => open(items[0])}>
                 <img
                   src={items[0].image}
-                  alt="Premium kesar pista mithai box"
-                />
+                  alt="Premium kesar pista mithai box" loading="lazy" decoding="async" />
                 <div className="featurecopy">
                   <span className="kind">Today’s selection</span>
                   <h2>{items[0].title}</h2>
@@ -814,8 +955,7 @@ function App() {
                   <img
                     src={sweet.image}
                     alt={sweet.title}
-                    style={{ viewTransitionName: `sweet-${sweet.id}` }}
-                  />
+                    style={{ viewTransitionName: `sweet-${sweet.id}` }} loading="lazy" decoding="async" />
                   <span><i>0{index + 1}</i><b>{sweet.title}</b><small>₹{sweet.price} / {sweet.unit}</small></span>
                 </button>
               ))}
@@ -924,54 +1064,131 @@ function App() {
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search laddoo, kaju katli, gift boxes…"
+              aria-label="Search sweets"
             />
-            <button>
+            {query && (
+              <button
+                className="searchclear"
+                aria-label="Clear search"
+                onClick={() => setQuery("")}
+              >
+                <X size={16} />
+              </button>
+            )}
+            <button className="searchcity">
               <MapPin size={17} /> Dombivli
             </button>
-            <button>
-              <SlidersHorizontal size={17} /> Filters
-            </button>
           </div>
-          <div className="tabs">
-            {(["all", "heritage", "gifting"] as const).map((t) => (
-              <button
-                key={t}
-                className={tab === t ? "on" : ""}
-                onClick={() => setTab(t)}
-              >
-                {t === "all"
-                  ? "All sweets"
-                  : t === "heritage"
-                    ? "Bihar classics"
-                    : "Gifting"}
-              </button>
-            ))}
-          </div>
-          <div className="resultshead">
-            <b>{filtered.length} live objects</b>
-            <span>Sorted by relevance</span>
-          </div>
-          {filtered.length ? (
-            <div className="marketgrid">
-              {filtered.map((i) => (
-                <Card
-                  key={i.id}
-                  item={i}
-                  onOpen={() => open(i)}
-                  saved={saved.includes(i.id)}
-                  onSave={() => toggle(i.id)}
-                  onAdd={() => addCart(i)}
-                />
+
+          <div className="filterbar">
+            <div className="chiprail" role="group" aria-label="Filter by category">
+              {categories.map((c) => (
+                <button
+                  key={c}
+                  className={category === c ? "on" : ""}
+                  aria-pressed={category === c}
+                  onClick={() => {
+                    setCategory(c);
+                    setTab("all");
+                  }}
+                >
+                  {c === "all" ? "All sweets" : c}
+                </button>
               ))}
             </div>
+            <div className="sortwrap">
+              <button
+                className={"sortbtn" + (sort !== "relevance" ? " on" : "")}
+                aria-expanded={sortOpen}
+                onClick={() => setSortOpen((v) => !v)}
+              >
+                <ArrowDownUp size={15} />
+                {SORTS.find((s) => s.key === sort)!.label}
+                <ChevronDown size={14} />
+              </button>
+              {sortOpen && (
+                <>
+                  <div
+                    className="sortscrim"
+                    onClick={() => setSortOpen(false)}
+                  />
+                  <ul className="sortmenu">
+                    {SORTS.map((s) => (
+                      <li key={s.key}>
+                        <button
+                          className={sort === s.key ? "on" : ""}
+                          onClick={() => {
+                            setSort(s.key);
+                            setSortOpen(false);
+                          }}
+                        >
+                          {s.label}
+                          {sort === s.key && <Check size={15} />}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
+            </div>
+          </div>
+
+          <div className="resultshead">
+            <b>
+              {filtered.length} {filtered.length === 1 ? "sweet" : "sweets"}
+              {category !== "all" && ` in ${category}`}
+            </b>
+            {(query || category !== "all") && (
+              <button
+                className="clearall"
+                onClick={() => {
+                  setQuery("");
+                  setCategory("all");
+                  setTab("all");
+                }}
+              >
+                Clear filters
+              </button>
+            )}
+          </div>
+
+          {filtered.length ? (
+            <>
+              <div className="marketgrid">
+                {shown.map((i) => (
+                  <Card
+                    key={i.id}
+                    item={i}
+                    onOpen={() => open(i)}
+                    saved={saved.includes(i.id)}
+                    onSave={() => toggle(i.id)}
+                    onAdd={() => addCart(i)}
+                  />
+                ))}
+              </div>
+              {visible < filtered.length && (
+                <button
+                  className="loadmore quantum-btn"
+                  onClick={() => setVisible((v) => v + 24)}
+                >
+                  Show {Math.min(24, filtered.length - visible)} more sweets
+                </button>
+              )}
+            </>
           ) : (
             <div className="empty">
               <Search />
-              <h2>Nothing matches that yet.</h2>
-              <p>
-                Try another sweet name or browse our complete collection.
-              </p>
-              <button onClick={() => nav("market")}>View all sweets</button>
+              <h2>No sweets match “{query}”.</h2>
+              <p>Try a different name, or browse the full collection.</p>
+              <button
+                onClick={() => {
+                  setQuery("");
+                  setCategory("all");
+                  setTab("all");
+                }}
+              >
+                View all sweets
+              </button>
             </div>
           )}
         </main>
@@ -1056,7 +1273,7 @@ function App() {
       )}
       {view === "legal" && <LegalPage />}
       <ComplianceFooter onNavigate={nav} isAdmin={isAdmin} />
-      <FloatingAssistants />
+      <SweetGuide />
       <nav className="mobileNav">
         <button className={view === "discover" ? "active" : ""} onClick={() => nav("discover")} aria-label="Discover">
           <LayoutGrid />
@@ -1070,9 +1287,16 @@ function App() {
           <ShoppingCart />
           {cartCount > 0 && <b className="dockBadge">{cartCount}</b>}
         </button>
-        <button onClick={() => document.querySelector<HTMLButtonElement>(".bot-float")?.click()} aria-label="Open sweet guide">
-          <MessageCircle />
-          <span>Help</span>
+        <button
+          className={view === "market" && tab === "gifting" ? "active" : ""}
+          onClick={() => {
+            setTab("gifting");
+            nav("market");
+          }}
+          aria-label="Gifting and celebration boxes"
+        >
+          <HeartHandshake />
+          <span>Gifting</span>
         </button>
         <button className={view === "dashboard" ? "active" : ""} onClick={() => nav("dashboard")} aria-label="Your account">
           <User />
@@ -1175,10 +1399,14 @@ function Detail({
           <img
             src={item.image}
             alt={item.title}
+            width={860}
+            height={640}
+            fetchPriority="high"
+            decoding="async"
             style={{ viewTransitionName: `sweet-${item.id}` }}
           />
           <div>
-            <img src={item.image} alt="" />
+            <img src={item.image} alt="" loading="lazy" decoding="async" />
             <button>+ 3 photos</button>
           </div>
         </div>
@@ -1348,7 +1576,7 @@ function Create({ close, done }: { close: () => void; done: () => void }) {
     <main className="composer">
       <header className="composehead">
         <button className="brand brand-logo">
-          <img src="/brand/ashok-sweets-mark.jpg" alt="Nakhye’s Ashok Sweets" />
+          <img src="/brand/ashok-sweets-mark.jpg" alt="Nakhye’s Ashok Sweets" loading="lazy" decoding="async" />
         </button>
         <span>New supply listing · Draft saved</span>
         <button onClick={close}>
@@ -1646,7 +1874,7 @@ function CartPage({
           <section className="cart-lines">
             {cart.map((line) => (
               <article key={line.item.id}>
-                <img src={line.item.image} alt={line.item.title} />
+                <img src={line.item.image} alt={line.item.title} loading="lazy" decoding="async" />
                 <div>
                   <p className="eyebrow">{line.item.category}</p>
                   <h2>{line.item.title}</h2>
@@ -1681,7 +1909,7 @@ function CartPage({
             ))}
           </section>
           <aside className="order-summary">
-            <img src="/brand/ashok-sweets-mark.jpg" alt="Ashok Sweets" />
+            <img src="/brand/ashok-sweets-mark.jpg" alt="Ashok Sweets" loading="lazy" decoding="async" />
             <p>ORDER SUMMARY</p>
             <dl>
               <div>
@@ -1710,10 +1938,51 @@ function CartPage({
               <ShieldCheck /> Secure payment through Razorpay
             </small>
           </aside>
+
+          {/* Phones get the total and the next step pinned to the bottom
+              instead of buried under the line items. Hidden on desktop,
+              where the summary column is already in view. */}
+          <div className="cart-sticky">
+            <span>
+              <small>
+                {subtotal >= 1499
+                  ? "Delivery free"
+                  : `₹${(1499 - subtotal).toLocaleString()} more for free delivery`}
+              </small>
+              <b>
+                ₹{(subtotal + (subtotal >= 1499 ? 0 : 99)).toLocaleString()}
+              </b>
+            </span>
+            <button onClick={checkout}>
+              Proceed to billing <ArrowUpRight />
+            </button>
+          </div>
         </div>
       )}
     </main>
   );
+}
+
+/**
+ * Razorpay's checkout script is ~90KB and only ever needed once someone
+ * actually pays, so it is fetched on demand rather than in <head>.
+ */
+let razorpayLoader: Promise<void> | null = null;
+function loadRazorpay(): Promise<void> {
+  if (window.Razorpay) return Promise.resolve();
+  if (razorpayLoader) return razorpayLoader;
+  razorpayLoader = new Promise<void>((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = "https://checkout.razorpay.com/v1/checkout.js";
+    script.async = true;
+    script.onload = () => resolve();
+    script.onerror = () => {
+      razorpayLoader = null;
+      reject(new Error("Razorpay checkout could not be loaded"));
+    };
+    document.head.appendChild(script);
+  });
+  return razorpayLoader;
 }
 
 function Checkout({ cart, done }: { cart: CartLine[]; done: () => void }) {
@@ -1747,7 +2016,7 @@ function Checkout({ cart, done }: { cart: CartLine[]; done: () => void }) {
   };
   const pay = async () => {
     const key = import.meta.env.VITE_RAZORPAY_KEY_ID;
-    if (!key || !window.Razorpay) {
+    if (!key) {
       setStatus(
         "Razorpay test mode is ready. Add the merchant Key ID and server Orders API to activate payment collection.",
       );
@@ -1755,6 +2024,7 @@ function Checkout({ cart, done }: { cart: CartLine[]; done: () => void }) {
     }
     setStatus("Creating a secure Razorpay order…");
     try {
+      await loadRazorpay();
       const response = await fetch("/api/razorpay/order", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -1766,7 +2036,7 @@ function Checkout({ cart, done }: { cart: CartLine[]; done: () => void }) {
       });
       if (!response.ok) throw new Error("Order service unavailable");
       const order = await response.json();
-      new window.Razorpay({
+      new window.Razorpay!({
         key,
         amount: total * 100,
         currency: "INR",
@@ -1846,7 +2116,7 @@ function Checkout({ cart, done }: { cart: CartLine[]; done: () => void }) {
           <h2>Your order</h2>
           {cart.map((line) => (
             <div className="checkout-line" key={line.item.id}>
-              <img src={line.item.image} alt="" />
+              <img src={line.item.image} alt="" loading="lazy" decoding="async" />
               <span>
                 {line.item.title}
                 <small>
@@ -2043,7 +2313,7 @@ function AdminPanel({
         </div>
         {products.slice(0, 24).map((product) => (
           <article key={product.id}>
-            <img src={product.image} alt="" />
+            <img src={product.image} alt="" loading="lazy" decoding="async" />
             <span>
               <b>{product.title}</b>
               <small>{product.category}</small>
@@ -2087,7 +2357,7 @@ function AdminLogin({ onSuccess }: { onSuccess: () => void }) {
         <p>Product publishing, inventory changes and coupon creation are restricted to an authenticated administrator session.</p>
       </section>
       <form className="login-panel" onSubmit={submit}>
-        <img src="/brand/ashok-sweets-mark.jpg" alt="Nakhye’s Ashok Sweets" />
+        <img src="/brand/ashok-sweets-mark.jpg" alt="Nakhye’s Ashok Sweets" loading="lazy" decoding="async" />
         <h2>Administrator sign in</h2>
         <label>Email address<input type="email" autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} required /></label>
         <label>Password<input type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required /></label>
@@ -2159,7 +2429,7 @@ function ComplianceFooter({ onNavigate, isAdmin }: { onNavigate: (view: SiteView
   return (
     <footer className="compliance-footer">
       <div className="footer-brand">
-        <img src="/brand/ashok-sweets-mark.jpg" alt="Nakhye’s Ashok Sweets" />
+        <img src="/brand/ashok-sweets-mark.jpg" alt="Nakhye’s Ashok Sweets" loading="lazy" decoding="async" />
         <p>
           M/S. Nakhye Foods LLP
           <br />
@@ -2233,82 +2503,6 @@ function ComplianceFooter({ onNavigate, isAdmin }: { onNavigate: (view: SiteView
         <span>© 2026 M/S Nakhye Foods LLP</span>
       </div>
     </footer>
-  );
-}
-
-function FloatingAssistants() {
-  const [open, setOpen] = useState(false);
-  const [messages, setMessages] = useState<string[]>([
-    "Namaste! Ask me about sweets, delivery, licences, bulk gifting or store locations.",
-  ]);
-  const [input, setInput] = useState("");
-  const send = () => {
-    if (!input.trim()) return;
-    const q = input.toLowerCase();
-    const answer =
-      q.includes("fssai") || q.includes("licence")
-        ? "Ashok Sweets lists FSSAI licences 11518021000077 and 11522021000582 on its submitted packaging."
-        : q.includes("address") || q.includes("location")
-          ? "We are at Pandit Dindayal Road, Dombivli West and Kelkar Road, Dombivli East."
-          : q.includes("bulk") || q.includes("wedding")
-            ? "Bulk wedding, corporate and festive orders can be requested from any product page or via WhatsApp."
-            : "I can help you search 100+ sweets, explain storage, delivery, payment and current offers.";
-    setMessages((m) => [...m, `You: ${input}`, answer]);
-    setInput("");
-  };
-  return (
-    <>
-      <div className="sticky-actions">
-        <a
-          className="whatsapp-float"
-          href="https://wa.me/919702655000?text=Namaste%20Ashok%20Sweets%2C%20I%20need%20help%20with%20an%20order."
-          target="_blank"
-          rel="noreferrer"
-        >
-          <MessageCircle />
-          <span>WhatsApp</span>
-        </a>
-        <button className="bot-float" aria-label="Open Ashok Sweet Guide" onClick={() => setOpen((v) => !v)}>
-          <Sparkles />
-          <span>Sweet guide</span>
-        </button>
-      </div>
-      {open && (
-        <aside className="bot-panel">
-          <header>
-            <img src="/brand/ashok-sweets-mark.jpg" alt="" />
-            <span>
-              <b>Ashok Sweet Guide</b>
-              <small>Website assistant · online</small>
-            </span>
-            <button aria-label="Close sweet guide" onClick={() => setOpen(false)}>
-              <X />
-            </button>
-          </header>
-          <div className="bot-messages">
-            {messages.map((message, index) => (
-              <p
-                key={index}
-                className={message.startsWith("You:") ? "user-message" : ""}
-              >
-                {message}
-              </p>
-            ))}
-          </div>
-          <div className="bot-input">
-            <input
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && send()}
-              placeholder="Ask about sweets, licences…"
-            />
-            <button aria-label="Send message" onClick={send}>
-              <Send />
-            </button>
-          </div>
-        </aside>
-      )}
-    </>
   );
 }
 
