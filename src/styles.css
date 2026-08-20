@@ -4298,3 +4298,19 @@ html {
     scroll-padding-top: 210px;
   }
 }
+
+/* PHOTO PLACEHOLDER
+   Categories the shop has no honest photograph for render a graphic stand-in
+   instead of a stock picture of the wrong sweet. It is a flat SVG, so the
+   hover zoom and saturation lift that flatter a real photograph only make it
+   look broken — hold it still and let it sit on the paper ground. */
+.photo:has(img[src$="_placeholder.svg"]) {
+  background: var(--canvas);
+}
+.photo img[src$="_placeholder.svg"] {
+  object-fit: contain;
+}
+.listing:hover .photo img[src$="_placeholder.svg"] {
+  transform: none;
+  filter: none;
+}

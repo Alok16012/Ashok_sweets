@@ -105,6 +105,19 @@ declare global {
    sweetNames, sweetImages and the legacyItems it built) went unused once
    `items` began reading the real catalogue, but still shipped in the bundle. */
 
+/* Shown wherever the shop has no photograph it can stand behind. Several
+   categories used to carry a stand-in that showed the wrong food outright —
+   a non-vegetarian thali on the Bengali sweets, a bowl of halwa on every
+   barfi — which is worse than showing no photograph at all. */
+const PHOTO_PLACEHOLDER = "/products/_placeholder.svg";
+
+/* A returning browser hydrates the catalogue from its own copy, so a shipped
+   correction to the catalogue is invisible until this key changes. Bump it
+   whenever src/catalogue.json changes in a way customers must see — v3 is the
+   removal of the category photographs that showed the wrong food. */
+const PRODUCTS_KEY = "ashok-products-v3";
+const STALE_PRODUCT_KEYS = ["ashok-products", "ashok-products-v2"];
+
 const items: Item[] = catalogue.map((product) => ({
   id: product.id,
   kind: "supply" as const,
@@ -271,12 +284,26 @@ function App() {
   const [palette, setPalette] = useState(false);
   const [requested, setRequested] = useState(false);
   const [processing, setProcessing] = useState(false);
+  // A catalogue entry pointing at a file nobody added would render a broken
+  // image on every card using it. `error` does not bubble, but it does
+  // capture, so one listener at the document covers every <img> in the app.
+  useEffect(() => {
+    const swapInPlaceholder = (event: Event) => {
+      const img = event.target as HTMLImageElement;
+      if (img.tagName !== "IMG") return;
+      const src = img.getAttribute("src") ?? "";
+      if (!src.startsWith("/products/") || src === PHOTO_PLACEHOLDER) return;
+      img.src = PHOTO_PLACEHOLDER;
+    };
+    document.addEventListener("error", swapInPlaceholder, true);
+    return () => document.removeEventListener("error", swapInPlaceholder, true);
+  }, []);
   useEffect(() => {
     const savedCart = localStorage.getItem("ashok-cart");
-    const savedProducts = localStorage.getItem("ashok-products-v2");
+    const savedProducts = localStorage.getItem(PRODUCTS_KEY);
     if (savedCart) setCart(JSON.parse(savedCart));
     if (savedProducts) setProducts(JSON.parse(savedProducts));
-    localStorage.removeItem("ashok-products");
+    for (const stale of STALE_PRODUCT_KEYS) localStorage.removeItem(stale);
   }, []);
   useEffect(
     () => localStorage.setItem("ashok-cart", JSON.stringify(cart)),
@@ -287,7 +314,7 @@ function App() {
   // slot and collapse bursts into one write.
   useEffect(() => {
     const write = () =>
-      localStorage.setItem("ashok-products-v2", JSON.stringify(products));
+      localStorage.setItem(PRODUCTS_KEY, JSON.stringify(products));
     const idle = window.requestIdleCallback;
     if (idle) {
       const handle = idle(write, { timeout: 1000 });
@@ -1997,7 +2024,7 @@ function AdminPanel({
       category: "New product",
       available: 25,
       requested: 0,
-      image: "/products/burfi.jpg",
+      image: PHOTO_PLACEHOLDER,
       seller: "Nakhye’s Ashok Sweets",
       place: "Dombivli",
       distance: "In store",
