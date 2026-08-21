@@ -113,10 +113,14 @@ const PHOTO_PLACEHOLDER = "/products/_placeholder.svg";
 
 /* A returning browser hydrates the catalogue from its own copy, so a shipped
    correction to the catalogue is invisible until this key changes. Bump it
-   whenever src/catalogue.json changes in a way customers must see — v3 is the
-   removal of the category photographs that showed the wrong food. */
-const PRODUCTS_KEY = "ashok-products-v3";
-const STALE_PRODUCT_KEYS = ["ashok-products", "ashok-products-v2"];
+   whenever src/catalogue.json changes in a way customers must see — v4 moves
+   the catalogue from one photograph per category to one per kind of sweet. */
+const PRODUCTS_KEY = "ashok-products-v4";
+const STALE_PRODUCT_KEYS = [
+  "ashok-products",
+  "ashok-products-v2",
+  "ashok-products-v3",
+];
 
 const items: Item[] = catalogue.map((product) => ({
   id: product.id,
