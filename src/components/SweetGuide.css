@@ -1,0 +1,348 @@
+/* Floating sweet guide. Fully self-contained — owns its own layer and never
+   depends on the mobile dock or any page-level layout. */
+
+.guide-root {
+  --guide-red: #b80819;
+  --guide-deep: #7d0511;
+  --guide-cream: #fffdf6;
+  --guide-ink: #2a1a19;
+  --guide-line: rgba(42, 26, 25, 0.12);
+  --guide-gap: 20px;
+
+  position: fixed;
+  z-index: 60;
+  right: var(--guide-gap);
+  bottom: var(--guide-gap);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 12px;
+  font-family: "Inter", system-ui, sans-serif;
+}
+
+/* ---------- launcher ---------- */
+
+.guide-launcher {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  height: 54px;
+  padding: 0 20px;
+  border: 0;
+  border-radius: 999px;
+  background: linear-gradient(145deg, #d11a29, var(--guide-deep));
+  color: #fff;
+  font: 600 14px/1 "Inter", system-ui, sans-serif;
+  box-shadow:
+    0 14px 34px rgba(184, 8, 25, 0.34),
+    0 2px 6px rgba(40, 20, 18, 0.18);
+  cursor: pointer;
+  transition:
+    transform 0.22s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.22s ease;
+}
+
+.guide-launcher:active {
+  transform: scale(0.94);
+}
+
+.guide-launcher.is-open {
+  width: 54px;
+  padding: 0;
+  justify-content: center;
+}
+
+.guide-launcher.is-open .guide-launcher-label {
+  display: none;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .guide-launcher:hover {
+    transform: translateY(-3px);
+    box-shadow:
+      0 20px 42px rgba(184, 8, 25, 0.42),
+      0 3px 8px rgba(40, 20, 18, 0.2);
+  }
+}
+
+/* ---------- panel ---------- */
+
+.guide-panel {
+  display: flex;
+  flex-direction: column;
+  width: min(374px, calc(100vw - var(--guide-gap) * 2));
+  height: min(560px, calc(100dvh - 150px));
+  overflow: hidden;
+  border: 1px solid var(--guide-line);
+  border-radius: 22px;
+  background: var(--guide-cream);
+  box-shadow:
+    0 28px 70px rgba(40, 20, 18, 0.26),
+    0 4px 12px rgba(40, 20, 18, 0.1);
+  animation: guide-in 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+  transform-origin: bottom right;
+}
+
+@keyframes guide-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.96);
+  }
+}
+
+.guide-head {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  flex: 0 0 auto;
+  padding: 13px 14px;
+  background: linear-gradient(135deg, var(--guide-deep), #c31122);
+  color: #fff;
+}
+
+.guide-avatar {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.18);
+  color: #ffd97a;
+}
+
+.guide-id {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.guide-id b {
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.guide-id small {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 2px;
+  font-size: 11px;
+  opacity: 0.82;
+}
+
+.guide-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #6ee7a0;
+}
+
+.guide-close {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
+  cursor: pointer;
+}
+
+.guide-close:hover {
+  background: rgba(255, 255, 255, 0.26);
+}
+
+/* ---------- conversation ---------- */
+
+.guide-log {
+  flex: 1;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding: 15px;
+  background: #f7f4ec;
+}
+
+.guide-msg {
+  max-width: 86%;
+  margin: 0;
+  padding: 10px 13px;
+  border-radius: 15px;
+  font-size: 13.5px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.guide-bot {
+  align-self: flex-start;
+  border: 1px solid var(--guide-line);
+  border-bottom-left-radius: 5px;
+  background: #fff;
+  color: var(--guide-ink);
+}
+
+.guide-user {
+  align-self: flex-end;
+  border-bottom-right-radius: 5px;
+  background: var(--guide-red);
+  color: #fff;
+}
+
+.guide-typing {
+  display: flex;
+  gap: 4px;
+  padding: 14px 13px;
+}
+
+.guide-typing i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #b9aca6;
+  animation: guide-bounce 1.1s infinite;
+}
+
+.guide-typing i:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.guide-typing i:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+@keyframes guide-bounce {
+  0%,
+  60%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.45;
+  }
+  30% {
+    transform: translateY(-4px);
+    opacity: 1;
+  }
+}
+
+.guide-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 5px;
+}
+
+.guide-chips button {
+  padding: 8px 13px;
+  border: 1px solid rgba(184, 8, 25, 0.28);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--guide-red);
+  font: 500 12px "Inter", system-ui, sans-serif;
+  cursor: pointer;
+  transition: background 0.18s ease;
+}
+
+.guide-chips button:hover {
+  background: #fdeff0;
+}
+
+/* ---------- compose ---------- */
+
+.guide-compose {
+  display: grid;
+  grid-template-columns: 1fr 46px;
+  flex: 0 0 auto;
+  border-top: 1px solid var(--guide-line);
+  background: var(--guide-cream);
+}
+
+.guide-compose input {
+  min-width: 0;
+  padding: 14px;
+  border: 0;
+  background: transparent;
+  color: var(--guide-ink);
+  font: 400 13.5px "Inter", system-ui, sans-serif;
+  outline: 0;
+}
+
+.guide-compose input::placeholder {
+  color: #a2938d;
+}
+
+.guide-compose button {
+  display: grid;
+  place-items: center;
+  border: 0;
+  background: var(--guide-red);
+  color: #fff;
+  cursor: pointer;
+  transition: background 0.18s ease;
+}
+
+.guide-compose button:disabled {
+  background: #d9cfca;
+  cursor: default;
+}
+
+.guide-handoff {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  flex: 0 0 auto;
+  padding: 11px;
+  border-top: 1px solid var(--guide-line);
+  background: #20a967;
+  color: #fff;
+  font: 600 12.5px "Inter", system-ui, sans-serif;
+  text-decoration: none;
+}
+
+.guide-handoff:hover {
+  background: #1c9159;
+}
+
+/* ---------- mobile: clear the dock, stay reachable ---------- */
+
+@media (max-width: 900px) {
+  .guide-root {
+    --guide-gap: 14px;
+    /* Sit above the floating dock rather than being hidden behind it. */
+    bottom: calc(var(--guide-gap) + 78px + env(safe-area-inset-bottom));
+  }
+
+  .guide-launcher {
+    width: 52px;
+    height: 52px;
+    padding: 0;
+    justify-content: center;
+  }
+
+  .guide-launcher-label {
+    display: none;
+  }
+
+  .guide-panel {
+    width: calc(100vw - var(--guide-gap) * 2);
+    height: min(
+      520px,
+      calc(100dvh - 190px - env(safe-area-inset-bottom))
+    );
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .guide-panel,
+  .guide-typing i {
+    animation: none;
+  }
+
+  .guide-launcher {
+    transition: none;
+  }
+}

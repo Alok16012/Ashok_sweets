@@ -1,4 +1,10 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, {
+  memo,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import { createRoot } from "react-dom/client";
 import {
   Search,
@@ -23,7 +29,7 @@ import {
   HeartHandshake,
   Zap,
   ShoppingCart,
-  CreditCard,
+  Wallet,
   TicketPercent,
   Settings,
   Trash2,
@@ -32,7 +38,13 @@ import {
   Store,
   Recycle,
   Leaf,
+  Star,
+  Truck,
+  ChevronDown,
+  ArrowDownUp,
 } from "lucide-react";
+import SweetGuide from "./components/SweetGuide";
+import catalogue from "./catalogue.json";
 import "./styles.css";
 
 type Item = {
@@ -51,9 +63,28 @@ type Item = {
   image: string;
   note: string;
   expiry: string;
+  stockKnown?: boolean;
   match?: string;
 };
 type CartLine = { item: Item; qty: number };
+type SortKey = "relevance" | "price-low" | "price-high" | "availability";
+
+const SORTS: { key: SortKey; label: string }[] = [
+  { key: "relevance", label: "Relevance" },
+  { key: "price-low", label: "Price: low to high" },
+  { key: "price-high", label: "Price: high to low" },
+  { key: "availability", label: "Most available" },
+];
+
+/** Craving chips on the home rail map to a search term, not a category. */
+const CRAVINGS = [
+  "Ladu",
+  "Kaju katli",
+  "Burfi",
+  "Halwa",
+  "Peda",
+  "Gift boxes",
+];
 type SiteView =
   | "discover"
   | "market"
@@ -65,259 +96,45 @@ type SiteView =
   | "adminLogin"
   | "admin"
   | "legal";
-declare global {
-  interface Window {
-    Razorpay?: new (options: Record<string, unknown>) => { open: () => void };
-  }
-}
-const featuredItems: Item[] = [
-  {
-    id: 1,
-    kind: "supply",
-    title: "Kesar pista festive box",
-    category: "Premium mithai",
-    available: 80,
-    requested: 37,
-    unit: "boxes",
-    price: 680,
-    place: "Dombivli West",
-    distance: "1.2 km",
-    seller: "Nakhye’s Ashok Sweets",
-    rating: "98% fulfilment",
-    image:
-      "https://static.wixstatic.com/media/57b89c_9a4a7311b25a41439084b657062603aa~mv2.jpg/v1/fill/w_980,h_1307,al_c,q_85/57b89c_9a4a7311b25a41439084b657062603aa~mv2.jpg",
-    note: "Made this morning · 12 handcrafted pieces",
-    expiry: "best before 4 days",
-  },
-  {
-    id: 2,
-    kind: "supply",
-    title: "Wedding favour mithai boxes",
-    category: "Wedding orders",
-    available: 42,
-    requested: 120,
-    unit: "boxes",
-    price: 450,
-    place: "Dombivli East",
-    distance: "3.4 km",
-    seller: "Nakhye’s Ashok Sweets",
-    rating: "34 completed orders",
-    image:
-      "https://weddingsutra.com/images/Vendor_Images/Wedding-Favors-%26-Gifts/meetha-by-radisson/meetha-by-radisson-03.jpg",
-    note: "Nine-piece boxes · rose and pistachio preferred",
-    expiry: "needed by 18 Aug",
-    match: "Strong match",
-  },
-  {
-    id: 3,
-    kind: "supply",
-    title: "Motichoor laddoo · desi ghee",
-    category: "Traditional favourites",
-    available: 48,
-    requested: 31,
-    unit: "boxes",
-    price: 520,
-    place: "Dombivli West",
-    distance: "2.1 km",
-    seller: "Nakhye’s Ashok Sweets",
-    rating: "Four-generation maker",
-    image: "https://media.pri.org/s3fs-public/story/images/Mithai.JPG",
-    note: "Six pieces · pure desi ghee · no preservatives",
-    expiry: "made today",
-  },
-  {
-    id: 4,
-    kind: "supply",
-    title: "Rose kaju katli collection",
-    category: "Contemporary mithai",
-    available: 36,
-    requested: 8,
-    unit: "boxes",
-    price: 790,
-    place: "Dombivli East",
-    distance: "4.8 km",
-    seller: "Nakhye’s Ashok Sweets",
-    rating: "100% fulfilment",
-    image:
-      "https://weddingsutra.com/images/Vendor_Images/Wedding-Favors-%26-Gifts/kesar-sweets/kesar-sweets-07.jpg",
-    note: "Rose petal, classic and pistachio · 18 pieces",
-    expiry: "best before 7 days",
-  },
-  {
-    id: 5,
-    kind: "supply",
-    title: "Corporate Diwali hampers",
-    category: "Bulk gifting",
-    available: 30,
-    requested: 75,
-    unit: "hampers",
-    price: 1200,
-    place: "Dombivli",
-    distance: "6.2 km",
-    seller: "Nakhye’s Ashok Sweets",
-    rating: "Usually replies in 12 min",
-    image:
-      "https://cdn.shopify.com/s/files/1/0895/2489/6047/files/5_collections.webp?v=1756896780",
-    note: "Custom sleeve and message card required",
-    expiry: "needed by 30 Sep",
-    match: "Possible match",
-  },
+/* The generated placeholder catalogue that used to live here (featuredItems,
+   sweetNames, sweetImages and the legacyItems it built) went unused once
+   `items` began reading the real catalogue, but still shipped in the bundle. */
+
+/* Shown wherever the shop has no photograph it can stand behind. Several
+   categories used to carry a stand-in that showed the wrong food outright —
+   a non-vegetarian thali on the Bengali sweets, a bowl of halwa on every
+   barfi — which is worse than showing no photograph at all. */
+const PHOTO_PLACEHOLDER = "/products/_placeholder.svg";
+
+/* A returning browser hydrates the catalogue from its own copy, so a shipped
+   correction to the catalogue is invisible until this key changes. Bump it
+   whenever src/catalogue.json changes in a way customers must see — v4 moves
+   the catalogue from one photograph per category to one per kind of sweet. */
+const PRODUCTS_KEY = "ashok-products-v4";
+const STALE_PRODUCT_KEYS = [
+  "ashok-products",
+  "ashok-products-v2",
+  "ashok-products-v3",
 ];
 
-const sweetNames = [
-  "Silao Khaja",
-  "Gaya Tilkut",
-  "Chhath Thekua",
-  "Harnaut Balushahi",
-  "Bihari Anarsa",
-  "Parwal Ki Mithai",
-  "Laung Lata",
-  "Kasar Laddoo",
-  "Chura Lai",
-  "Makhana Kheer",
-  "Malpua Rabri",
-  "Pedukia",
-  "Khoya Belgrami",
-  "Laktho",
-  "Khurma",
-  "Gaja",
-  "Khurchan",
-  "Rasia Kheer",
-  "Doodh Pitha",
-  "Gud Pua",
-  "Kala Til Laddoo",
-  "White Til Laddoo",
-  "Murmura Lai",
-  "Chana Murki",
-  "Gur Ki Patti",
-  "Motichoor Laddoo",
-  "Besan Laddoo",
-  "Boondi Laddoo",
-  "Gond Laddoo",
-  "Methi Laddoo",
-  "Atta Laddoo",
-  "Coconut Laddoo",
-  "Dry Fruit Laddoo",
-  "Kaju Katli",
-  "Kesar Kaju Katli",
-  "Rose Kaju Katli",
-  "Pista Barfi",
-  "Badam Barfi",
-  "Milk Cake",
-  "Kalakand",
-  "Malai Peda",
-  "Kesar Peda",
-  "Mathura Peda",
-  "Dharwad Peda",
-  "Chocolate Peda",
-  "Gulab Jamun",
-  "Kala Jamun",
-  "Dry Jamun",
-  "Rasgulla",
-  "Rajbhog",
-  "Rasmalai",
-  "Kesar Rasmalai",
-  "Cham Cham",
-  "Malai Cham Cham",
-  "Sandesh",
-  "Kesar Sandesh",
-  "Nolen Gur Sandesh",
-  "Kheer Kadam",
-  "Chhena Toast",
-  "Chhena Murki",
-  "Pantua",
-  "Langcha",
-  "Ledikeni",
-  "Jalebi",
-  "Kesar Jalebi",
-  "Imarti",
-  "Rabri Jalebi",
-  "Shahi Tukda",
-  "Moong Dal Halwa",
-  "Gajar Halwa",
-  "Sooji Halwa",
-  "Badam Halwa",
-  "Sohan Halwa",
-  "Habshi Halwa",
-  "Karachi Halwa",
-  "Patisa",
-  "Soan Papdi",
-  "Mysore Pak",
-  "Ghewar",
-  "Malai Ghewar",
-  "Kesar Ghewar",
-  "Gujiya",
-  "Chandrakala",
-  "Karanji",
-  "Modak",
-  "Mawa Modak",
-  "Petha",
-  "Angoori Petha",
-  "Kesar Petha",
-  "Coconut Barfi",
-  "Mawa Barfi",
-  "Dodha Barfi",
-  "Khoya Roll",
-  "Kaju Roll",
-  "Pista Roll",
-  "Badam Pak",
-  "Dry Fruit Pak",
-  "Mango Barfi",
-  "Rose Barfi",
-  "Orange Barfi",
-  "Pan Petha",
-  "Baklava Mithai",
-  "Rose Truffle Laddoo",
-  "Paan Laddoo",
-  "Sugar-free Kaju Katli",
-  "Jaggery Sandesh",
-  "Wedding Assorted Box",
-  "Diwali Heritage Hamper",
-  "Corporate Mithai Box",
-  "Chhath Prasad Box",
-];
-const sweetImages = [
-  "https://cf-img-a-in.tosshub.com/sites/visualstory/wp/2023/10/mithaii.jpg?size=%2A%3A900",
-  "https://images.slurrp.com/webstories/wp-content/uploads/2023/10/13183954/Tilkut.webp",
-  "https://media.pri.org/s3fs-public/story/images/Mithai.JPG",
-  "https://images.tv9bangla.com/wp-content/uploads/2024/07/famous-sweets.jpeg",
-  "https://chhattisgarhdarpan.com/uploads/loveyoulife/1692676999ngali-mithai.jpg",
-  "https://amritsweets.uk/images/sw.png",
-  "https://weddingsutra.com/images/Vendor_Images/Wedding-Favors-%26-Gifts/kesar-sweets/kesar-sweets-07.jpg",
-  "https://static.wixstatic.com/media/57b89c_9a4a7311b25a41439084b657062603aa~mv2.jpg/v1/fill/w_980,h_1307,al_c,q_85/57b89c_9a4a7311b25a41439084b657062603aa~mv2.jpg",
-];
-const items: Item[] = [
-  ...featuredItems,
-  ...sweetNames.slice(5).map((title, index) => ({
-    id: index + 6,
-    kind: "supply" as const,
-    title,
-    category:
-      index < 20
-        ? "Bihar heritage"
-        : index < 55
-          ? "Everyday favourites"
-          : index < 82
-            ? "Celebration sweets"
-            : "Premium gifting",
-    available: 12 + ((index * 7) % 76),
-    requested: 4 + ((index * 11) % 39),
-    unit: index % 4 === 0 ? "kg" : "boxes",
-    price: 240 + ((index * 65) % 760),
-    place: index % 2 ? "Dombivli East" : "Dombivli West",
-    distance: `${(0.8 + (index % 12) * 0.6).toFixed(1)} km`,
-    seller: "Nakhye’s Ashok Sweets",
-    rating:
-      index % 3 === 0 ? "Identity verified" : `${94 + (index % 6)}% fulfilment`,
-    image: sweetImages[index % sweetImages.length],
-    note:
-      index < 20
-        ? "Regional recipe · made in Bihar"
-        : "Fresh batch · vegetarian",
-    expiry: index % 3 === 0 ? "made today" : "best before 5 days",
-    match: undefined,
-  })),
-];
+const items: Item[] = catalogue.map((product) => ({
+  id: product.id,
+  kind: "supply" as const,
+  title: product.title,
+  category: product.category,
+  available: 99,
+  requested: 0,
+  unit: product.unit,
+  price: product.mrp,
+  place: "Dombivli East & West",
+  distance: "Both stores",
+  seller: "Nakhye’s Ashok Sweets",
+  rating: "Catalogue price · 14 Aug 2026",
+  image: product.image,
+  note: `MRP ₹${product.mrp}/${product.unit} · confirm availability with store`,
+  expiry: "Freshness details on pack",
+  stockKnown: false,
+}));
 
 function Balance({
   item,
@@ -328,6 +145,17 @@ function Balance({
   large?: boolean;
   preview?: number;
 }) {
+  if (item.stockKnown === false) {
+    return (
+      <div className={"balance " + (large ? "large" : "")} aria-label="Availability confirmed by the store">
+        <div className="balance-labels">
+          <span><b>Store availability</b></span>
+          <span>Confirm at checkout</span>
+        </div>
+        <div className="track"><i style={{ width: "100%" }} /></div>
+      </div>
+    );
+  }
   const value = preview ?? item.requested,
     total = item.available + item.requested,
     supply = Math.max(
@@ -356,7 +184,7 @@ function Balance({
   );
 }
 
-function Card({
+const Card = memo(function Card({
   item,
   onOpen,
   saved,
@@ -370,7 +198,7 @@ function Card({
   onAdd: () => void;
 }) {
   const low =
-    item.kind === "supply" &&
+    item.stockKnown !== false && item.kind === "supply" &&
     item.available / (item.available + item.requested) < 0.3;
   return (
     <article
@@ -383,6 +211,10 @@ function Card({
         <img
           src={item.image}
           alt=""
+          loading="lazy"
+          decoding="async"
+          width={420}
+          height={300}
           style={{ viewTransitionName: `sweet-${item.id}` }}
         />
         <span className="kind">
@@ -429,7 +261,7 @@ function Card({
       </div>
     </article>
   );
-}
+});
 
 function App() {
   const [view, setView] = useState<SiteView>("discover");
@@ -439,28 +271,62 @@ function App() {
   const [products, setProducts] = useState<Item[]>(items);
   const [cart, setCart] = useState<CartLine[]>([]);
   const [selected, setSelected] = useState(items[0]);
-  const [qty, setQty] = useState(12);
+  const [qty, setQty] = useState(1);
   const [saved, setSaved] = useState<number[]>([4]);
   const [toast, setToast] = useState("");
   const [query, setQuery] = useState("");
   const [tab, setTab] = useState<"all" | "heritage" | "gifting">("all");
+  const [category, setCategory] = useState("all");
+  const [sort, setSort] = useState<SortKey>("relevance");
+  const [sortOpen, setSortOpen] = useState(false);
+  const [visible, setVisible] = useState(24);
   const [palette, setPalette] = useState(false);
   const [requested, setRequested] = useState(false);
   const [processing, setProcessing] = useState(false);
+  // A catalogue entry pointing at a file nobody added would render a broken
+  // image on every card using it. `error` does not bubble, but it does
+  // capture, so one listener at the document covers every <img> in the app.
+  useEffect(() => {
+    const swapInPlaceholder = (event: Event) => {
+      const img = event.target as HTMLImageElement;
+      if (img.tagName !== "IMG") return;
+      const src = img.getAttribute("src") ?? "";
+      if (!src.startsWith("/products/") || src === PHOTO_PLACEHOLDER) return;
+      img.src = PHOTO_PLACEHOLDER;
+    };
+    document.addEventListener("error", swapInPlaceholder, true);
+    return () => document.removeEventListener("error", swapInPlaceholder, true);
+  }, []);
   useEffect(() => {
     const savedCart = localStorage.getItem("ashok-cart");
-    const savedProducts = localStorage.getItem("ashok-products");
+    const savedProducts = localStorage.getItem(PRODUCTS_KEY);
     if (savedCart) setCart(JSON.parse(savedCart));
     if (savedProducts) setProducts(JSON.parse(savedProducts));
+    for (const stale of STALE_PRODUCT_KEYS) localStorage.removeItem(stale);
   }, []);
   useEffect(
     () => localStorage.setItem("ashok-cart", JSON.stringify(cart)),
     [cart],
   );
-  useEffect(
-    () => localStorage.setItem("ashok-products", JSON.stringify(products)),
-    [products],
-  );
+  // The catalogue is ~110 records; serialising it synchronously on every
+  // change blocks the main thread during admin edits. Defer it to an idle
+  // slot and collapse bursts into one write.
+  useEffect(() => {
+    const write = () =>
+      localStorage.setItem(PRODUCTS_KEY, JSON.stringify(products));
+    const idle = window.requestIdleCallback;
+    if (idle) {
+      const handle = idle(write, { timeout: 1000 });
+      return () => window.cancelIdleCallback?.(handle);
+    }
+    const timeout = window.setTimeout(write, 400);
+    return () => window.clearTimeout(timeout);
+  }, [products]);
+  useEffect(() => {
+    if (!toast) return;
+    const timeout = window.setTimeout(() => setToast(""), 2800);
+    return () => window.clearTimeout(timeout);
+  }, [toast]);
   useEffect(() => {
     const f = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === "k") {
@@ -475,20 +341,41 @@ function App() {
     addEventListener("keydown", f);
     return () => removeEventListener("keydown", f);
   }, [view]);
+  // Magnetic button effect. Purely decorative, so it is skipped entirely on
+  // touch devices and for reduced-motion users, and the remaining work is
+  // batched into one rAF per frame instead of running on every pointer event.
   useEffect(() => {
+    const decorative =
+      matchMedia("(hover: hover) and (pointer: fine)").matches &&
+      !matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (!decorative) return;
+
+    let frame = 0;
+    let pending: { target: HTMLElement; x: number; y: number } | null = null;
+
+    const paint = () => {
+      frame = 0;
+      if (!pending) return;
+      const { target, x, y } = pending;
+      pending = null;
+      const rect = target.getBoundingClientRect();
+      const px = ((x - rect.left) / rect.width) * 100;
+      const py = ((y - rect.top) / rect.height) * 100;
+      target.style.setProperty("--mouse-x", `${px}%`);
+      target.style.setProperty("--mouse-y", `${py}%`);
+      target.style.setProperty("--pull-x", `${(px - 50) * 0.025}px`);
+      target.style.setProperty("--pull-y", `${(py - 50) * 0.025}px`);
+    };
+
     const move = (event: PointerEvent) => {
       const target = (event.target as HTMLElement).closest<HTMLElement>(
         ".quantum-btn",
       );
       if (!target) return;
-      const rect = target.getBoundingClientRect();
-      const x = ((event.clientX - rect.left) / rect.width) * 100;
-      const y = ((event.clientY - rect.top) / rect.height) * 100;
-      target.style.setProperty("--mouse-x", `${x}%`);
-      target.style.setProperty("--mouse-y", `${y}%`);
-      target.style.setProperty("--pull-x", `${(x - 50) * 0.025}px`);
-      target.style.setProperty("--pull-y", `${(y - 50) * 0.025}px`);
+      pending = { target, x: event.clientX, y: event.clientY };
+      if (!frame) frame = requestAnimationFrame(paint);
     };
+
     const leave = (event: PointerEvent) => {
       const target = (event.target as HTMLElement).closest<HTMLElement>(
         ".quantum-btn",
@@ -501,24 +388,67 @@ function App() {
         target.style.removeProperty("--pull-y");
       }
     };
-    addEventListener("pointermove", move);
-    addEventListener("pointerout", leave);
+
+    addEventListener("pointermove", move, { passive: true });
+    addEventListener("pointerout", leave, { passive: true });
     return () => {
+      if (frame) cancelAnimationFrame(frame);
       removeEventListener("pointermove", move);
       removeEventListener("pointerout", leave);
     };
   }, []);
-  const filtered = useMemo(
-    () =>
-      products.filter(
-        (i) =>
-          (tab === "all" ||
-            (tab === "heritage" && /bihar|traditional/i.test(i.category)) ||
-            (tab === "gifting" && /gift|wedding|bulk/i.test(i.category))) &&
-          i.title.toLowerCase().includes(query.toLowerCase()),
-      ),
-    [tab, query, products],
+  // Category chips are built from the catalogue itself, so adding a product in
+  // the admin panel surfaces its category without touching this list.
+  const categories = useMemo(
+    () => ["all", ...Array.from(new Set(products.map((p) => p.category)))],
+    [products],
   );
+
+  // Keep typing responsive: React renders the keystroke first and re-filters
+  // the 110-item catalogue at a lower priority.
+  const deferredQuery = useDeferredValue(query);
+
+  const filtered = useMemo(() => {
+    const term = deferredQuery.trim().toLowerCase();
+    const result = products.filter((i) => {
+      const inTab =
+        tab === "all" ||
+        (tab === "heritage" && /bangali|ladu|pedha|khaja/i.test(i.category)) ||
+        (tab === "gifting" && /kaju|burfi|other sweets/i.test(i.category));
+      const inCategory = category === "all" || i.category === category;
+      const matches =
+        !term ||
+        i.title.toLowerCase().includes(term) ||
+        i.category.toLowerCase().includes(term);
+      return inTab && inCategory && matches;
+    });
+
+    switch (sort) {
+      case "price-low":
+        return result.sort((a, b) => a.price - b.price);
+      case "price-high":
+        return result.sort((a, b) => b.price - a.price);
+      case "availability":
+        return result.sort((a, b) => b.available - a.available);
+      default:
+        return result;
+    }
+  }, [tab, category, sort, deferredQuery, products]);
+
+  // Render the grid in pages so a cold load paints 24 cards, not 110.
+  useEffect(() => setVisible(24), [tab, category, sort, deferredQuery]);
+  const shown = useMemo(
+    () => filtered.slice(0, visible),
+    [filtered, visible],
+  );
+
+  /** Jump to the catalogue with a search term already applied. */
+  const searchFor = (term: string) => {
+    setQuery(term);
+    setCategory("all");
+    setTab("all");
+    nav("market");
+  };
   const addCart = (item: Item, amount = 1) => {
     setCart((current) => {
       const existing = current.find((line) => line.item.id === item.id);
@@ -535,15 +465,24 @@ function App() {
   const cartCount = cart.reduce((sum, line) => sum + line.qty, 0);
   const transition = (update: () => void) => {
     const doc = document as Document & {
-      startViewTransition?: (callback: () => void) => void;
+      startViewTransition?: (callback: () => void) => {
+        finished: Promise<void>;
+      };
     };
-    if (doc.startViewTransition) doc.startViewTransition(update);
-    else update();
+    // A transition started while the document is hidden — or superseded by
+    // a second navigation — rejects `finished`. That is expected, so it is
+    // swallowed rather than left as an unhandled rejection. Skipping the
+    // transition entirely when hidden also avoids the wasted snapshot.
+    if (!doc.startViewTransition || document.visibilityState === "hidden") {
+      update();
+      return;
+    }
+    doc.startViewTransition(update).finished.catch(() => {});
   };
   const open = (i: Item) => {
     transition(() => {
       setSelected(i);
-      setQty(Math.min(12, i.available));
+      setQty(1);
       setRequested(false);
       setProcessing(false);
       setView("detail");
@@ -573,7 +512,14 @@ function App() {
           onClick={() => nav("discover")}
           aria-label="Nakhye’s Ashok Sweets home"
         >
-          <img src="/brand/ashok-sweets-mark.jpg" alt="Nakhye’s Ashok Sweets" />
+          <img
+            src="/brand/ashok-sweets-mark.jpg"
+            alt="Nakhye’s Ashok Sweets"
+            width={205}
+            height={76}
+            fetchPriority="high"
+            decoding="async"
+          />
         </button>
         <nav aria-label="Primary">
           <button
@@ -620,6 +566,29 @@ function App() {
           )}
         </div>
       </header>
+      {(view === "discover" || view === "market") && (
+        <section className="mobileOrderBar" aria-label="Delivery and search">
+          <div className="mobileLocation">
+            <MapPin size={18} />
+            <span>
+              <b>Delivery in Dombivli</b>
+              <small>West &amp; East stores · 30–45 min</small>
+            </span>
+            <Truck size={17} />
+          </div>
+          <button className="mobileSearch" onClick={() => setPalette(true)}>
+            <Search size={18} />{" "}
+            <span>Search for laddoo, kaju katli, gift boxes…</span>
+          </button>
+          <div className="mobileCravings">
+            {CRAVINGS.map((craving) => (
+              <button key={craving} onClick={() => searchFor(craving)}>
+                {craving}
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
       {view === "discover" && (
         <main>
           <section
@@ -628,13 +597,13 @@ function App() {
           >
             <div>
               <span>FRESH IN DOMBIVLI</span>
-              <b>418 mithai boxes available</b>
+              <b>{items.length} catalogue products</b>
               <i>✦</i>
-              <b>267 boxes wanted</b>
+              <b>{new Set(items.map((item) => item.category)).size} sweet &amp; snack categories</b>
               <i>✦</i>
-              <b>46 sweet exchanges today</b>
+              <b>Dombivli East &amp; West</b>
               <i>✦</i>
-              <b>12 wedding-order matches</b>
+              <b>Prices updated 14 Aug 2026</b>
             </div>
           </section>
           <section className="intro">
@@ -668,39 +637,42 @@ function App() {
               <img
                 src={items[0].image}
                 alt="Premium Indian mithai box available nearby"
+                width={720}
+                height={900}
+                fetchPriority="high"
+                decoding="async"
               />
               <div className="heroTicket">
-                <span>MEHER MITHAI · 1.2 KM</span>
+                <span>{items[0].category.toUpperCase()} · BOTH STORES</span>
                 <h2>
-                  80<small>boxes</small>
+                  ₹{items[0].price}<small>/{items[0].unit}</small>
                 </h2>
-                <p>kesar pista collection</p>
+                <p>{items[0].title}</p>
                 <Balance item={items[0]} />
                 <button className="quantum-btn" onClick={() => open(items[0])}>
-                  Choose a box <ArrowUpRight />
+                  View product <ArrowUpRight />
                 </button>
               </div>
               <div className="demandStamp">
-                <b>120</b>
+                <b>{items.length}</b>
                 <span>
-                  wedding boxes
+                  real catalogue items
                   <br />
-                  wanted nearby
+                  ready to explore
                 </span>
               </div>
             </div>
           </section>
           <section className="categoryRail">
             <span>Shop by craving</span>
-            <button onClick={() => nav("market")}>LADDOO</button>
-            <i>✦</i>
-            <button onClick={() => nav("market")}>KAJU KATLI</button>
-            <i>✦</i>
-            <button onClick={() => nav("market")}>BENGALI</button>
-            <i>✦</i>
-            <button onClick={() => nav("market")}>GIFT BOXES</button>
-            <i>✦</i>
-            <button onClick={() => nav("market")}>WEDDINGS</button>
+            {CRAVINGS.map((craving, index) => (
+              <React.Fragment key={craving}>
+                {index > 0 && <i>✦</i>}
+                <button onClick={() => searchFor(craving)}>
+                  {craving.toUpperCase()}
+                </button>
+              </React.Fragment>
+            ))}
           </section>
           <section className="sweetAtlas">
             <div className="atlasIntro">
@@ -729,8 +701,7 @@ function App() {
                   <img
                     src={sweet.image}
                     alt={sweet.title}
-                    style={{ viewTransitionName: `sweet-${sweet.id}` }}
-                  />
+                    style={{ viewTransitionName: `sweet-${sweet.id}` }} loading="lazy" decoding="async" />
                   <span>
                     <b>{String(index + 1).padStart(2, "0")}</b>
                     {sweet.title}
@@ -753,8 +724,7 @@ function App() {
               <div className="feature" onClick={() => open(items[0])}>
                 <img
                   src={items[0].image}
-                  alt="Premium kesar pista mithai box"
-                />
+                  alt="Premium kesar pista mithai box" loading="lazy" decoding="async" />
                 <div className="featurecopy">
                   <span className="kind">Today’s selection</span>
                   <h2>{items[0].title}</h2>
@@ -762,7 +732,7 @@ function App() {
                   <Balance item={items[0]} large />
                   <div className="featurebottom">
                     <div>
-                      <b>₹680</b> / box
+                      <b>₹{items[0].price}</b> / {items[0].unit}
                     </div>
                     <button className="quantum-btn">
                       Choose quantity <ChevronRight size={18} />
@@ -799,8 +769,7 @@ function App() {
                   <img
                     src={sweet.image}
                     alt={sweet.title}
-                    style={{ viewTransitionName: `sweet-${sweet.id}` }}
-                  />
+                    style={{ viewTransitionName: `sweet-${sweet.id}` }} loading="lazy" decoding="async" />
                   <span><i>0{index + 1}</i><b>{sweet.title}</b><small>₹{sweet.price} / {sweet.unit}</small></span>
                 </button>
               ))}
@@ -824,13 +793,13 @@ function App() {
             </div>
             <div className="demandrows">
               {items
-                .filter((i) => /gifting|wedding/i.test(i.category))
+                .filter((i) => /kaju|burfi/i.test(i.category))
                 .slice(0, 4)
                 .map((i) => (
                   <button key={i.id} onClick={() => open(i)}>
                     <span className="dnumber">
-                      {i.requested}
-                      <small>{i.unit}</small>
+                      ₹{i.price}
+                      <small>/{i.unit}</small>
                     </span>
                     <span>
                       <b>{i.title}</b>
@@ -856,16 +825,16 @@ function App() {
             </div>
             <ol>
               <li>
-                <b>31 boxes</b> of motichoor laddoo were reserved{" "}
-                <time>14 min ago</time>
+                <b>{items.length} products</b> imported from the current catalogue{" "}
+                <time>14 Aug 2026</time>
               </li>
               <li>
-                <b>New wedding demand</b> for 120 favour boxes{" "}
-                <time>38 min ago</time>
+                <b>{new Set(items.map((item) => item.category)).size} categories</b> cover sweets, snacks and chaat{" "}
+                <time>current range</time>
               </li>
               <li>
-                <b>Rose kaju katli</b> now has 36 boxes available{" "}
-                <time>2 hr ago</time>
+                <b>MRP pricing</b> is shown directly on every product{" "}
+                <time>availability confirmed by store</time>
               </li>
             </ol>
           </section>
@@ -909,53 +878,131 @@ function App() {
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search laddoo, kaju katli, gift boxes…"
+              aria-label="Search sweets"
             />
-            <button>
+            {query && (
+              <button
+                className="searchclear"
+                aria-label="Clear search"
+                onClick={() => setQuery("")}
+              >
+                <X size={16} />
+              </button>
+            )}
+            <button className="searchcity">
               <MapPin size={17} /> Dombivli
             </button>
-            <button>
-              <SlidersHorizontal size={17} /> Filters
-            </button>
           </div>
-          <div className="tabs">
-            {(["all", "heritage", "gifting"] as const).map((t) => (
-              <button
-                className={tab === t ? "on" : ""}
-                onClick={() => setTab(t)}
-              >
-                {t === "all"
-                  ? "All sweets"
-                  : t === "heritage"
-                    ? "Bihar classics"
-                    : "Gifting"}
-              </button>
-            ))}
-          </div>
-          <div className="resultshead">
-            <b>{filtered.length} live objects</b>
-            <span>Sorted by relevance</span>
-          </div>
-          {filtered.length ? (
-            <div className="marketgrid">
-              {filtered.map((i) => (
-                <Card
-                  key={i.id}
-                  item={i}
-                  onOpen={() => open(i)}
-                  saved={saved.includes(i.id)}
-                  onSave={() => toggle(i.id)}
-                  onAdd={() => addCart(i)}
-                />
+
+          <div className="filterbar">
+            <div className="chiprail" role="group" aria-label="Filter by category">
+              {categories.map((c) => (
+                <button
+                  key={c}
+                  className={category === c ? "on" : ""}
+                  aria-pressed={category === c}
+                  onClick={() => {
+                    setCategory(c);
+                    setTab("all");
+                  }}
+                >
+                  {c === "all" ? "All sweets" : c}
+                </button>
               ))}
             </div>
+            <div className="sortwrap">
+              <button
+                className={"sortbtn" + (sort !== "relevance" ? " on" : "")}
+                aria-expanded={sortOpen}
+                onClick={() => setSortOpen((v) => !v)}
+              >
+                <ArrowDownUp size={15} />
+                {SORTS.find((s) => s.key === sort)!.label}
+                <ChevronDown size={14} />
+              </button>
+              {sortOpen && (
+                <>
+                  <div
+                    className="sortscrim"
+                    onClick={() => setSortOpen(false)}
+                  />
+                  <ul className="sortmenu">
+                    {SORTS.map((s) => (
+                      <li key={s.key}>
+                        <button
+                          className={sort === s.key ? "on" : ""}
+                          onClick={() => {
+                            setSort(s.key);
+                            setSortOpen(false);
+                          }}
+                        >
+                          {s.label}
+                          {sort === s.key && <Check size={15} />}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
+            </div>
+          </div>
+
+          <div className="resultshead">
+            <b>
+              {filtered.length} {filtered.length === 1 ? "sweet" : "sweets"}
+              {category !== "all" && ` in ${category}`}
+            </b>
+            {(query || category !== "all") && (
+              <button
+                className="clearall"
+                onClick={() => {
+                  setQuery("");
+                  setCategory("all");
+                  setTab("all");
+                }}
+              >
+                Clear filters
+              </button>
+            )}
+          </div>
+
+          {filtered.length ? (
+            <>
+              <div className="marketgrid">
+                {shown.map((i) => (
+                  <Card
+                    key={i.id}
+                    item={i}
+                    onOpen={() => open(i)}
+                    saved={saved.includes(i.id)}
+                    onSave={() => toggle(i.id)}
+                    onAdd={() => addCart(i)}
+                  />
+                ))}
+              </div>
+              {visible < filtered.length && (
+                <button
+                  className="loadmore quantum-btn"
+                  onClick={() => setVisible((v) => v + 24)}
+                >
+                  Show {Math.min(24, filtered.length - visible)} more sweets
+                </button>
+              )}
+            </>
           ) : (
             <div className="empty">
               <Search />
-              <h2>Nothing matches that yet.</h2>
-              <p>
-                Try another sweet name or browse our complete collection.
-              </p>
-              <button onClick={() => nav("market")}>View all sweets</button>
+              <h2>No sweets match “{query}”.</h2>
+              <p>Try a different name, or browse the full collection.</p>
+              <button
+                onClick={() => {
+                  setQuery("");
+                  setCategory("all");
+                  setTab("all");
+                }}
+              >
+                View all sweets
+              </button>
             </div>
           )}
         </main>
@@ -1008,8 +1055,11 @@ function App() {
       {view === "checkout" && (
         <Checkout
           cart={cart}
-          done={() => {
+          done={(order) => {
             setCart([]);
+            setToast(
+              `Order ${order.id} placed — ₹${order.total.toLocaleString()} payable on delivery`,
+            );
             nav("dashboard");
           }}
         />
@@ -1040,26 +1090,34 @@ function App() {
       )}
       {view === "legal" && <LegalPage />}
       <ComplianceFooter onNavigate={nav} isAdmin={isAdmin} />
-      <FloatingAssistants />
+      <SweetGuide />
       <nav className="mobileNav">
-        <button onClick={() => nav("discover")}>
+        <button className={view === "discover" ? "active" : ""} onClick={() => nav("discover")} aria-label="Discover">
           <LayoutGrid />
-          Discover
+          <span>Home</span>
         </button>
-        <button onClick={() => nav("market")}>
+        <button className={view === "market" ? "active" : ""} onClick={() => nav("market")} aria-label="Search sweets">
           <Search />
-          Search
+          <span>Search</span>
         </button>
-        <button onClick={() => nav("cart")} className="mobileplus" aria-label="Cart">
+        <button onClick={() => nav("cart")} className={`mobileplus ${view === "cart" || view === "checkout" ? "active" : ""}`} aria-label={`Cart with ${cartCount} items`}>
           <ShoppingCart />
+          {cartCount > 0 && <b className="dockBadge">{cartCount}</b>}
         </button>
-        <button>
-          <MessageCircle />
-          Messages
+        <button
+          className={view === "market" && tab === "gifting" ? "active" : ""}
+          onClick={() => {
+            setTab("gifting");
+            nav("market");
+          }}
+          aria-label="Gifting and celebration boxes"
+        >
+          <HeartHandshake />
+          <span>Gifting</span>
         </button>
-        <button onClick={() => nav("dashboard")}>
+        <button className={view === "dashboard" ? "active" : ""} onClick={() => nav("dashboard")} aria-label="Your account">
           <User />
-          You
+          <span>You</span>
         </button>
       </nav>
       {palette && (
@@ -1070,8 +1128,16 @@ function App() {
               <input
                 autoFocus
                 placeholder="Search Ashok Sweets or type a command…"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    setPalette(false);
+                    nav("market");
+                  }
+                }}
               />
-              <button onClick={() => setPalette(false)}>
+              <button aria-label="Close search" onClick={() => setPalette(false)}>
                 <X />
               </button>
             </div>
@@ -1150,10 +1216,14 @@ function Detail({
           <img
             src={item.image}
             alt={item.title}
+            width={860}
+            height={640}
+            fetchPriority="high"
+            decoding="async"
             style={{ viewTransitionName: `sweet-${item.id}` }}
           />
           <div>
-            <img src={item.image} alt="" />
+            <img src={item.image} alt="" loading="lazy" decoding="async" />
             <button>+ 3 photos</button>
           </div>
         </div>
@@ -1178,10 +1248,10 @@ function Detail({
           </div>
           <div className="quantity">
             <div className="qhead">
-              <span>AVAILABLE TO REQUEST</span>
+              <span>{item.stockKnown === false ? "CATALOGUE PRICE" : "AVAILABLE TO REQUEST"}</span>
               <b>
-                {item.available}
-                <small>{item.unit}</small>
+                {item.stockKnown === false ? `₹${item.price}` : item.available}
+                <small>{item.stockKnown === false ? `/${item.unit}` : item.unit}</small>
               </b>
             </div>
             <Balance item={item} large preview={item.requested + qty} />
@@ -1225,8 +1295,9 @@ function Detail({
               </span>
             </div>
             <p className="after">
-              <i /> {item.available - qty} {item.unit} will remain after your
-              request
+              <i /> {item.stockKnown === false
+                ? "Final availability is confirmed by the store."
+                : `${item.available - qty} ${item.unit} will remain after your request`}
             </p>
             <div className="commerce-actions">
               <button className="add-cart quantum-btn" onClick={addToCart}>
@@ -1258,8 +1329,8 @@ function Detail({
               )}
             </button>
             <p className="safe">
-              <ShieldCheck /> Secure billing. Razorpay checkout is used for
-              online payments.
+              <ShieldCheck /> Cash on delivery. Pay the rider when your order
+              arrives — nothing is charged in advance.
             </p>
           </div>
           <div className="detailactions">
@@ -1323,7 +1394,7 @@ function Create({ close, done }: { close: () => void; done: () => void }) {
     <main className="composer">
       <header className="composehead">
         <button className="brand brand-logo">
-          <img src="/brand/ashok-sweets-mark.jpg" alt="Nakhye’s Ashok Sweets" />
+          <img src="/brand/ashok-sweets-mark.jpg" alt="Nakhye’s Ashok Sweets" loading="lazy" decoding="async" />
         </button>
         <span>New supply listing · Draft saved</span>
         <button onClick={close}>
@@ -1621,7 +1692,7 @@ function CartPage({
           <section className="cart-lines">
             {cart.map((line) => (
               <article key={line.item.id}>
-                <img src={line.item.image} alt={line.item.title} />
+                <img src={line.item.image} alt={line.item.title} loading="lazy" decoding="async" />
                 <div>
                   <p className="eyebrow">{line.item.category}</p>
                   <h2>{line.item.title}</h2>
@@ -1656,7 +1727,7 @@ function CartPage({
             ))}
           </section>
           <aside className="order-summary">
-            <img src="/brand/ashok-sweets-mark.jpg" alt="Ashok Sweets" />
+            <img src="/brand/ashok-sweets-mark.jpg" alt="Ashok Sweets" loading="lazy" decoding="async" />
             <p>ORDER SUMMARY</p>
             <dl>
               <div>
@@ -1669,7 +1740,7 @@ function CartPage({
               </div>
               <div>
                 <dt>Estimated GST</dt>
-                <dd>Calculated at billing</dd>
+                <dd>Calculated at checkout</dd>
               </div>
             </dl>
             <div className="summary-total">
@@ -1679,22 +1750,106 @@ function CartPage({
               </b>
             </div>
             <button className="request quantum-btn" onClick={checkout}>
-              Proceed to billing <ArrowUpRight />
+              Proceed to checkout <ArrowUpRight />
             </button>
             <small>
-              <ShieldCheck /> Secure payment through Razorpay
+              <ShieldCheck /> Cash on delivery — pay when it arrives
             </small>
           </aside>
+
+          {/* Phones get the total and the next step pinned to the bottom
+              instead of buried under the line items. Hidden on desktop,
+              where the summary column is already in view. */}
+          <div className="cart-sticky">
+            <span>
+              <small>
+                {subtotal >= 1499
+                  ? "Delivery free"
+                  : `₹${(1499 - subtotal).toLocaleString()} more for free delivery`}
+              </small>
+              <b>
+                ₹{(subtotal + (subtotal >= 1499 ? 0 : 99)).toLocaleString()}
+              </b>
+            </span>
+            <button onClick={checkout}>
+              Proceed to checkout <ArrowUpRight />
+            </button>
+          </div>
         </div>
       )}
     </main>
   );
 }
 
-function Checkout({ cart, done }: { cart: CartLine[]; done: () => void }) {
+/* Cash on delivery is the only way to pay, so placing an order is the whole
+   transaction — there is no payment provider keeping a second copy. The order
+   has to be written down here or it does not exist anywhere. */
+export const ORDERS_KEY = "ashok-orders";
+export type Order = {
+  id: string;
+  placedAt: string;
+  name: string;
+  phone: string;
+  email: string;
+  address: string;
+  city: string;
+  pin: string;
+  note: string;
+  lines: { title: string; qty: number; price: number }[];
+  subtotal: number;
+  delivery: number;
+  discount: number;
+  total: number;
+  coupon: string;
+  status: "placed" | "confirmed" | "out" | "delivered" | "cancelled";
+};
+
+export function readOrders(): Order[] {
+  try {
+    const raw = JSON.parse(localStorage.getItem(ORDERS_KEY) || "[]");
+    return Array.isArray(raw) ? (raw as Order[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+/* Indian mobile numbers are ten digits opening 6-9. The rider phones this
+   number to find the door, so a typo here costs a delivery, not a form error. */
+const PHONE = /^[6-9]\d{9}$/;
+const PIN = /^\d{6}$/;
+
+function Checkout({ cart, done }: { cart: CartLine[]; done: (o: Order) => void }) {
   const [coupon, setCoupon] = useState("");
   const [applied, setApplied] = useState(0);
+  const [appliedCode, setAppliedCode] = useState("");
   const [status, setStatus] = useState("");
+  const [placing, setPlacing] = useState(false);
+  const [touched, setTouched] = useState(false);
+  const [form, setForm] = useState({
+    name: "",
+    phone: "",
+    email: "",
+    address: "",
+    city: "Dombivli",
+    pin: "",
+    note: "",
+  });
+  const set = (k: keyof typeof form) => (
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
+  ) => setForm((f) => ({ ...f, [k]: e.target.value }));
+
+  const errors: Partial<Record<keyof typeof form, string>> = {};
+  if (!form.name.trim()) errors.name = "Who should the rider ask for?";
+  if (!PHONE.test(form.phone.replace(/\D/g, "").slice(-10)))
+    errors.phone = "Ten digits, starting 6 to 9.";
+  if (form.email.trim() && !form.email.includes("@"))
+    errors.email = "That does not look like an email address.";
+  if (form.address.trim().length < 12)
+    errors.address = "Add the house or flat number and a landmark.";
+  if (!form.city.trim()) errors.city = "Required.";
+  if (!PIN.test(form.pin.trim())) errors.pin = "Six digits.";
+  const valid = Object.keys(errors).length === 0;
+
   const subtotal = cart.reduce((s, l) => s + l.item.price * l.qty, 0);
   const delivery = subtotal >= 1499 ? 0 : 99;
   const total = Math.max(
@@ -1717,65 +1872,58 @@ function Checkout({ cart, done }: { cart: CartLine[]; done: () => void }) {
     );
     if (found) {
       setApplied(found.discount);
+      setAppliedCode(found.code);
       setStatus(`${found.code} applied — ${found.discount}% off`);
     } else setStatus("This coupon is invalid or inactive.");
   };
-  const pay = async () => {
-    const key = import.meta.env.VITE_RAZORPAY_KEY_ID;
-    if (!key || !window.Razorpay) {
+
+  const placeOrder = () => {
+    setTouched(true);
+    if (!valid || !cart.length || placing) {
+      if (!valid) setStatus("Please complete the delivery details above.");
+      return;
+    }
+    setPlacing(true);
+    const order: Order = {
+      id: `AS${Date.now().toString(36).toUpperCase()}`,
+      placedAt: new Date().toISOString(),
+      name: form.name.trim(),
+      phone: form.phone.replace(/\D/g, "").slice(-10),
+      email: form.email.trim(),
+      address: form.address.trim(),
+      city: form.city.trim(),
+      pin: form.pin.trim(),
+      note: form.note.trim(),
+      lines: cart.map((l) => ({
+        title: l.item.title,
+        qty: l.qty,
+        price: l.item.price,
+      })),
+      subtotal,
+      delivery,
+      discount: Math.round((subtotal * applied) / 100),
+      total,
+      coupon: appliedCode,
+      status: "placed",
+    };
+    try {
+      localStorage.setItem(ORDERS_KEY, JSON.stringify([order, ...readOrders()]));
+    } catch {
+      /* A full or blocked localStorage must not swallow the order silently. */
+      setPlacing(false);
       setStatus(
-        "Razorpay test mode is ready. Add the merchant Key ID and server Orders API to activate payment collection.",
+        "This browser would not save the order. Please call the shop on 0251 242 1234 to place it.",
       );
       return;
     }
-    setStatus("Creating a secure Razorpay order…");
-    try {
-      const response = await fetch("/api/razorpay/order", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          amount: total * 100,
-          currency: "INR",
-          receipt: `ashok-${Date.now()}`,
-        }),
-      });
-      if (!response.ok) throw new Error("Order service unavailable");
-      const order = await response.json();
-      new window.Razorpay({
-        key,
-        amount: total * 100,
-        currency: "INR",
-        name: "Nakhye’s Ashok Sweets",
-        description: "Sweet order",
-        image: `${location.origin}/brand/ashok-sweets-mark.jpg`,
-        order_id: order.id,
-        theme: { color: "#b80819" },
-        handler: async (payment: Record<string, string>) => {
-          setStatus("Payment received. Verifying your order…");
-          const verification = await fetch("/api/razorpay/verify", {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify(payment),
-          });
-          if (!verification.ok) {
-            setStatus("Payment verification failed. Please do not retry until support checks the transaction.");
-            return;
-          }
-          done();
-        },
-      }).open();
-    } catch {
-      setStatus(
-        "Payment could not start. Please retry or order through WhatsApp.",
-      );
-    }
+    done(order);
   };
   return (
     <main className="checkout-page commerce-page">
       <div className="commerce-heading">
-        <p className="kicker">SECURE CHECKOUT</p>
+        <p className="kicker">CASH ON DELIVERY</p>
         <h1>
-          Billing & <em>payment.</em>
+          Where should we <em>deliver?</em>
         </h1>
       </div>
       <div className="checkout-grid">
@@ -1784,44 +1932,99 @@ function Checkout({ cart, done }: { cart: CartLine[]; done: () => void }) {
           <div className="form-grid">
             <label>
               Full name
-              <input placeholder="Your name" />
+              <input
+                value={form.name}
+                onChange={set("name")}
+                autoComplete="name"
+                placeholder="Your name"
+                aria-invalid={touched && !!errors.name}
+              />
+              {touched && errors.name && <em className="fielderr">{errors.name}</em>}
             </label>
             <label>
               Mobile number
-              <input inputMode="tel" placeholder="+91" />
+              <input
+                value={form.phone}
+                onChange={set("phone")}
+                inputMode="tel"
+                autoComplete="tel"
+                placeholder="98XXXXXXXX"
+                aria-invalid={touched && !!errors.phone}
+              />
+              {touched && errors.phone && <em className="fielderr">{errors.phone}</em>}
             </label>
             <label className="wide">
-              Email
-              <input type="email" placeholder="you@example.com" />
+              Email <small className="optional">optional</small>
+              <input
+                value={form.email}
+                onChange={set("email")}
+                type="email"
+                autoComplete="email"
+                placeholder="you@example.com"
+                aria-invalid={touched && !!errors.email}
+              />
+              {touched && errors.email && <em className="fielderr">{errors.email}</em>}
             </label>
             <label className="wide">
               Delivery address
-              <textarea placeholder="House, street, landmark" />
+              <textarea
+                value={form.address}
+                onChange={set("address")}
+                autoComplete="street-address"
+                placeholder="Flat / house number, building, street, landmark"
+                aria-invalid={touched && !!errors.address}
+              />
+              {touched && errors.address && <em className="fielderr">{errors.address}</em>}
             </label>
             <label>
               City
-              <input defaultValue="Dombivli" />
+              <input
+                value={form.city}
+                onChange={set("city")}
+                autoComplete="address-level2"
+                aria-invalid={touched && !!errors.city}
+              />
+              {touched && errors.city && <em className="fielderr">{errors.city}</em>}
             </label>
             <label>
               PIN code
-              <input inputMode="numeric" placeholder="421202" />
+              <input
+                value={form.pin}
+                onChange={set("pin")}
+                inputMode="numeric"
+                autoComplete="postal-code"
+                placeholder="421202"
+                aria-invalid={touched && !!errors.pin}
+              />
+              {touched && errors.pin && <em className="fielderr">{errors.pin}</em>}
+            </label>
+            <label className="wide">
+              Delivery note <small className="optional">optional</small>
+              <input
+                value={form.note}
+                onChange={set("note")}
+                placeholder="Ring the bell twice, leave with the watchman…"
+              />
             </label>
           </div>
           <h2>Payment</h2>
-          <div className="razorpay-box">
-            <div className="razor-mark">R</div>
+          <div className="cod-box">
+            <Wallet />
             <span>
-              <b>Razorpay Secure</b>
-              <small>UPI · Cards · Netbanking · Wallets</small>
+              <b>Cash on delivery</b>
+              <small>
+                Pay the rider in cash when your sweets arrive. Please keep the
+                exact amount ready — riders may not carry change.
+              </small>
             </span>
-            <ShieldCheck />
+            <Check />
           </div>
         </section>
         <aside className="checkout-summary">
           <h2>Your order</h2>
           {cart.map((line) => (
             <div className="checkout-line" key={line.item.id}>
-              <img src={line.item.image} alt="" />
+              <img src={line.item.image} alt="" loading="lazy" decoding="async" />
               <span>
                 {line.item.title}
                 <small>
@@ -1870,19 +2073,19 @@ function Checkout({ cart, done }: { cart: CartLine[]; done: () => void }) {
             </div>
           </dl>
           <div className="summary-total">
-            <span>Payable</span>
+            <span>Pay on delivery</span>
             <b>₹{total.toLocaleString()}</b>
           </div>
           <button
-            disabled={!cart.length}
+            disabled={!cart.length || placing}
             className="request quantum-btn"
-            onClick={pay}
+            onClick={placeOrder}
           >
-            <CreditCard /> Pay securely ₹{total.toLocaleString()}
+            <Wallet /> Place order · ₹{total.toLocaleString()} on delivery
           </button>
           <small>
-            Test-mode payment preview. Live collection requires server-side
-            Razorpay order creation and credentials.
+            No advance payment. We call to confirm before the order leaves the
+            shop.
           </small>
         </aside>
       </div>
@@ -1913,7 +2116,7 @@ function AdminPanel({
       category: "New product",
       available: 25,
       requested: 0,
-      image: sweetImages[0],
+      image: PHOTO_PLACEHOLDER,
       seller: "Nakhye’s Ashok Sweets",
       place: "Dombivli",
       distance: "In store",
@@ -2018,7 +2221,7 @@ function AdminPanel({
         </div>
         {products.slice(0, 24).map((product) => (
           <article key={product.id}>
-            <img src={product.image} alt="" />
+            <img src={product.image} alt="" loading="lazy" decoding="async" />
             <span>
               <b>{product.title}</b>
               <small>{product.category}</small>
@@ -2062,7 +2265,7 @@ function AdminLogin({ onSuccess }: { onSuccess: () => void }) {
         <p>Product publishing, inventory changes and coupon creation are restricted to an authenticated administrator session.</p>
       </section>
       <form className="login-panel" onSubmit={submit}>
-        <img src="/brand/ashok-sweets-mark.jpg" alt="Nakhye’s Ashok Sweets" />
+        <img src="/brand/ashok-sweets-mark.jpg" alt="Nakhye’s Ashok Sweets" loading="lazy" decoding="async" />
         <h2>Administrator sign in</h2>
         <label>Email address<input type="email" autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} required /></label>
         <label>Password<input type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required /></label>
@@ -2092,18 +2295,18 @@ function LegalPage() {
             <p className="kicker">01 · TERMS OF USE AND SALE</p>
             <h2>Ordering from Ashok Sweets</h2>
             <p>By browsing this website, creating an account or placing an order, you agree to these terms. “Ashok Sweets”, “we”, “us” and “our” refer to M/S Nakhye Foods LLP. “Customer”, “you” and “your” refer to the person using the service or purchasing products.</p>
-            <h3>Products and availability</h3><p>We sell vegetarian sweets, gift packs and related food products. Product photographs are representative; handmade sweets may differ slightly in colour, shape, garnish and arrangement. Availability, batch size and delivery estimates may change. An order is accepted only when we confirm it and, for prepaid orders, receive successful payment confirmation.</p>
-            <h3>Pricing, taxes and coupons</h3><p>Prices are displayed in Indian Rupees and will show applicable taxes, delivery charges and discounts before payment. Coupons are non-transferable, subject to stated validity, minimum-order and product restrictions, and may be withdrawn where issued in error, misused or prohibited by law. Unless expressly stated, offers cannot be combined.</p>
+            <h3>Products and availability</h3><p>We sell vegetarian sweets, gift packs and related food products. Product photographs are representative; handmade sweets may differ slightly in colour, shape, garnish and arrangement. Availability, batch size and delivery estimates may change. All orders are cash on delivery; we do not collect advance payment. An order is accepted only when we confirm it, usually by telephone, and payment is collected in cash at the door.</p>
+            <h3>Pricing, taxes and coupons</h3><p>Prices are displayed in Indian Rupees and show applicable taxes, delivery charges and discounts before you place the order; that displayed total is the amount payable in cash on delivery. Coupons are non-transferable, subject to stated validity, minimum-order and product restrictions, and may be withdrawn where issued in error, misused or prohibited by law. Unless expressly stated, offers cannot be combined.</p>
             <h3>Food information and allergies</h3><p>Customers must review product descriptions, ingredient and allergen information on the pack and contact us before ordering if they have an allergy or intolerance. Products may be prepared in facilities that handle milk, nuts, gluten, sesame and other allergens. Never rely only on product imagery or a search filter for medical or allergen decisions.</p>
-            <h3>Acceptable use</h3><p>You must provide accurate billing and delivery information, use only a payment method you are authorised to use, and not interfere with the website, attempt unauthorised administration access, scrape content, introduce malware, misuse coupons or place fraudulent orders.</p>
+            <h3>Acceptable use</h3><p>You must provide an accurate delivery address and a reachable mobile number, be available to receive and pay for the order, and not interfere with the website, attempt unauthorised administration access, scrape content, introduce malware, misuse coupons or place fraudulent orders.</p>
             <h3>Intellectual property and liability</h3><p>The Ashok Sweets name, submitted logo, packaging artwork, website design, copy and original content belong to or are licensed to M/S Nakhye Foods LLP. To the extent permitted by law, we are not liable for indirect or consequential loss, but nothing in these terms excludes liability or consumer remedies that cannot lawfully be excluded.</p>
           </section>
           <section id="privacy">
             <p className="kicker">02 · PRIVACY POLICY</p>
             <h2>How we use your information</h2>
-            <p>We may collect identity and contact details, delivery address, order history, customer-support messages, coupon use, device and usage data, and payment status. Card, UPI or net-banking credentials are entered into the payment provider’s secure interface; we should not store full card or UPI authentication credentials.</p>
-            <h3>Purposes</h3><p>We use information to create and fulfil orders, collect or reconcile payment, deliver products, issue invoices, prevent fraud, answer requests, manage recalls or food-safety matters, maintain the service, comply with law and—with separate consent where required—send offers. We limit collection to information reasonably necessary for these purposes.</p>
-            <h3>Sharing and processors</h3><p>Information may be shared on a need-to-know basis with Razorpay or another configured payment provider, delivery partners, hosting/database providers such as Vercel and Supabase, messaging providers, professional advisers and public authorities where legally required. Each production provider must be contracted and configured with appropriate security and access controls.</p>
+            <p>We may collect identity and contact details, delivery address, order history, customer-support messages, coupon use, and device and usage data. Because every order is cash on delivery, we do not ask for and never receive card, UPI or net-banking credentials.</p>
+            <h3>Purposes</h3><p>We use information to create and fulfil orders, reconcile cash collected on delivery, deliver products, issue invoices, prevent fraud, answer requests, manage recalls or food-safety matters, maintain the service, comply with law and—with separate consent where required—send offers. We limit collection to information reasonably necessary for these purposes.</p>
+            <h3>Sharing and processors</h3><p>Information may be shared on a need-to-know basis with delivery partners, hosting/database providers such as Vercel and Supabase, messaging providers, professional advisers and public authorities where legally required. Each production provider must be contracted and configured with appropriate security and access controls.</p>
             <h3>Retention, security and choices</h3><p>We retain data only for the order, legal, accounting, fraud-prevention and dispute periods applicable to it, then delete or anonymise it where feasible. We use role-based access, encryption in transit, restricted production credentials, logging and backups appropriate to the risk. No internet service is completely secure. You may request access, correction, erasure or withdrawal of optional consent, subject to legal retention and transaction requirements, through the contact below.</p>
             <h3>Cookies</h3><p>Essential storage may keep cart contents, security state and preferences. Analytics or advertising cookies should remain disabled until a consent mechanism and the relevant vendor disclosures are implemented.</p>
           </section>
@@ -2134,7 +2337,7 @@ function ComplianceFooter({ onNavigate, isAdmin }: { onNavigate: (view: SiteView
   return (
     <footer className="compliance-footer">
       <div className="footer-brand">
-        <img src="/brand/ashok-sweets-mark.jpg" alt="Nakhye’s Ashok Sweets" />
+        <img src="/brand/ashok-sweets-mark.jpg" alt="Nakhye’s Ashok Sweets" loading="lazy" decoding="async" />
         <p>
           M/S. Nakhye Foods LLP
           <br />
@@ -2208,82 +2411,6 @@ function ComplianceFooter({ onNavigate, isAdmin }: { onNavigate: (view: SiteView
         <span>© 2026 M/S Nakhye Foods LLP</span>
       </div>
     </footer>
-  );
-}
-
-function FloatingAssistants() {
-  const [open, setOpen] = useState(false);
-  const [messages, setMessages] = useState<string[]>([
-    "Namaste! Ask me about sweets, delivery, licences, bulk gifting or store locations.",
-  ]);
-  const [input, setInput] = useState("");
-  const send = () => {
-    if (!input.trim()) return;
-    const q = input.toLowerCase();
-    const answer =
-      q.includes("fssai") || q.includes("licence")
-        ? "Ashok Sweets lists FSSAI licences 11518021000077 and 11522021000582 on its submitted packaging."
-        : q.includes("address") || q.includes("location")
-          ? "We are at Pandit Dindayal Road, Dombivli West and Kelkar Road, Dombivli East."
-          : q.includes("bulk") || q.includes("wedding")
-            ? "Bulk wedding, corporate and festive orders can be requested from any product page or via WhatsApp."
-            : "I can help you search 100+ sweets, explain storage, delivery, payment and current offers.";
-    setMessages((m) => [...m, `You: ${input}`, answer]);
-    setInput("");
-  };
-  return (
-    <>
-      <div className="sticky-actions">
-        <a
-          className="whatsapp-float"
-          href="https://wa.me/919702655000?text=Namaste%20Ashok%20Sweets%2C%20I%20need%20help%20with%20an%20order."
-          target="_blank"
-          rel="noreferrer"
-        >
-          <MessageCircle />
-          <span>WhatsApp</span>
-        </a>
-        <button className="bot-float" onClick={() => setOpen((v) => !v)}>
-          <Sparkles />
-          <span>Sweet guide</span>
-        </button>
-      </div>
-      {open && (
-        <aside className="bot-panel">
-          <header>
-            <img src="/brand/ashok-sweets-mark.jpg" alt="" />
-            <span>
-              <b>Ashok Sweet Guide</b>
-              <small>Website assistant · online</small>
-            </span>
-            <button onClick={() => setOpen(false)}>
-              <X />
-            </button>
-          </header>
-          <div className="bot-messages">
-            {messages.map((message, index) => (
-              <p
-                key={index}
-                className={message.startsWith("You:") ? "user-message" : ""}
-              >
-                {message}
-              </p>
-            ))}
-          </div>
-          <div className="bot-input">
-            <input
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && send()}
-              placeholder="Ask about sweets, licences…"
-            />
-            <button onClick={send}>
-              <Send />
-            </button>
-          </div>
-        </aside>
-      )}
-    </>
   );
 }
 

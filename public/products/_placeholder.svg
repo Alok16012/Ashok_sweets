@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" role="img" aria-label="Photograph not available">
+  <!-- Deliberately text-free: the card crops this with object-fit and renders it
+       anywhere from 150px to 285px tall, so any lettering would be illegible.
+       The product title sits directly beneath it in every layout. -->
+  <rect width="400" height="400" fill="#f2f0e9"/>
+  <g stroke="#d7d5cb" stroke-width="1.5" fill="none" opacity="0.7">
+    <path d="M0 100h400M0 200h400M0 300h400M100 0v400M200 0v400M300 0v400"/>
+  </g>
+  <g transform="translate(200 200)">
+    <circle r="96" fill="#faf9f4" stroke="#d7d5cb" stroke-width="2"/>
+    <circle r="62" fill="none" stroke="#e75b3f" stroke-width="3" stroke-dasharray="9 13" opacity="0.85"/>
+    <circle r="30" fill="none" stroke="#264f4c" stroke-width="3" opacity="0.55"/>
+    <circle r="9" fill="#e75b3f"/>
+  </g>
+</svg>

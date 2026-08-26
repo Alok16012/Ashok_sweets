@@ -1,4 +1,5 @@
-@import url("https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Inter:wght@400;500;600;650;700&family=Noto+Serif+Devanagari:wght@500;700&display=swap");
+/* Fonts are loaded from index.html with preconnect — see the <link> there.
+   An @import here would serialise the request behind this stylesheet. */
 :root {
   --canvas: #f2f0e9;
   --paper: #faf9f4;
@@ -2419,22 +2420,16 @@ body {
     auto,
     32px 32px;
 }
-.app > main:not(.composer) {
-  animation: pageReveal 620ms cubic-bezier(0.16, 1, 0.3, 1) both;
-  transform-origin: 50% 20%;
-}
-@keyframes pageReveal {
-  from {
-    opacity: 0;
-    transform: translateY(22px) scale(0.992);
-    filter: blur(8px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-    filter: blur(0);
-  }
-}
+/* The page-entrance animation that used to live here is gone on purpose.
+   It faded <main> in from opacity 0 with an 8px blur and a translate on
+   every navigation, which cost three things:
+   - LCP was pushed out by the animation's full duration, because the
+     largest element on the page started invisible;
+   - blurring a full-page layer is an expensive composite;
+   - the transform made <main> a containing block, so position:fixed
+     children (the sticky cart total, modals) anchored to main rather
+     than the viewport while it ran.
+   View transitions already cover the navigation feel. */
 header {
   background: rgba(255, 250, 240, 0.68);
   border-bottom-color: rgba(255, 255, 255, 0.65);
@@ -3178,28 +3173,58 @@ header {
 .form-grid textarea {
   min-height: 100px;
   resize: vertical;
+  /* Textareas default to the browser's monospace face, which left the address
+     field looking like a code box next to the sans-serif inputs beside it. */
+  font-family: inherit;
 }
-.razorpay-box {
+/* Cash on delivery is the only method, so this panel states a fact rather
+   than offering a choice — no radio, nothing to select. */
+.cod-box {
   display: flex;
   align-items: center;
   gap: 15px;
-  border: 1px solid #4d5ee4;
-  background: #f7f8ff;
+  border: 1px solid var(--green, #264f4c);
+  background: #f1f6f3;
   padding: 17px;
 }
-.razor-mark {
-  width: 43px;
-  height: 43px;
-  background: #2f4ad0;
-  color: #fff;
-  display: grid;
-  place-items: center;
-  font-weight: 700;
+.cod-box > svg:first-child {
+  width: 26px;
+  height: 26px;
+  flex: none;
+  color: var(--green, #264f4c);
 }
-.razorpay-box span {
+.cod-box > svg:last-child {
+  width: 20px;
+  height: 20px;
+  flex: none;
+  color: var(--green, #264f4c);
+}
+.cod-box span {
   display: flex;
   flex-direction: column;
   flex: 1;
+  gap: 3px;
+}
+.cod-box small {
+  color: var(--muted, #6b6b6b);
+  line-height: 1.45;
+}
+.fielderr {
+  display: block;
+  margin-top: 5px;
+  font-style: normal;
+  font-size: 13px;
+  color: #b80819;
+}
+.form-grid input[aria-invalid="true"],
+.form-grid textarea[aria-invalid="true"] {
+  border-color: #b80819;
+}
+.optional {
+  color: var(--muted, #6b6b6b);
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
 }
 .checkout-line {
   display: grid;
@@ -3396,112 +3421,6 @@ header {
   color: #a99b91;
   margin-top: 18px;
 }
-.sticky-actions {
-  position: fixed;
-  z-index: 45;
-  right: 20px;
-  bottom: 22px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-.sticky-actions > a,
-.sticky-actions > button {
-  height: 52px;
-  border: 1px solid rgba(255, 255, 255, 0.6);
-  border-radius: 28px;
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  padding: 0 16px;
-  box-shadow: 0 14px 35px rgba(39, 22, 20, 0.22);
-  backdrop-filter: blur(16px);
-  font-weight: 600;
-}
-.whatsapp-float {
-  background: #20a967;
-  color: #fff;
-  text-decoration: none;
-}
-.bot-float {
-  background: rgba(255, 253, 245, 0.88);
-  color: var(--ashok-red);
-}
-.bot-panel {
-  position: fixed;
-  z-index: 46;
-  right: 20px;
-  bottom: 145px;
-  width: min(390px, calc(100vw - 28px));
-  height: 520px;
-  background: rgba(255, 253, 245, 0.93);
-  backdrop-filter: blur(24px);
-  border: 1px solid rgba(255, 255, 255, 0.8);
-  box-shadow: 0 25px 80px rgba(40, 20, 18, 0.24);
-  display: flex;
-  flex-direction: column;
-  animation: floatIn 0.35s var(--ease);
-}
-.bot-panel header {
-  position: static;
-  height: 70px;
-  padding: 8px 12px;
-  background: var(--ashok-red);
-  color: #fff;
-}
-.bot-panel header img {
-  width: 80px;
-  height: 50px;
-  object-fit: cover;
-}
-.bot-panel header span {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  margin-left: 10px;
-}
-.bot-panel header small {
-  opacity: 0.75;
-}
-.bot-panel header button {
-  border: 0;
-  background: none;
-  color: #fff;
-}
-.bot-messages {
-  flex: 1;
-  overflow: auto;
-  padding: 17px;
-}
-.bot-messages p {
-  max-width: 88%;
-  background: #fff;
-  border: 1px solid var(--line);
-  padding: 11px 13px;
-  border-radius: 4px 14px 14px 14px;
-  font-size: 13px;
-}
-.bot-messages .user-message {
-  margin-left: auto;
-  background: #f2d8da;
-  border-radius: 14px 4px 14px 14px;
-}
-.bot-input {
-  display: grid;
-  grid-template-columns: 1fr 48px;
-  border-top: 1px solid var(--line);
-}
-.bot-input input {
-  border: 0;
-  background: transparent;
-  padding: 15px;
-  outline: 0;
-}
-.bot-input button {
-  border: 0;
-  background: var(--ashok-red);
-  color: #fff;
-}
 @media (max-width: 900px) {
   .brand-logo {
     width: 145px;
@@ -3521,21 +3440,6 @@ header {
   }
   .commerce-page {
     padding-inline: 18px;
-  }
-  .sticky-actions {
-    bottom: 82px;
-  }
-  .sticky-actions span {
-    display: none;
-  }
-  .sticky-actions > a,
-  .sticky-actions > button {
-    width: 52px;
-    padding: 0;
-    justify-content: center;
-  }
-  .bot-panel {
-    bottom: 145px;
   }
   .commerce-actions {
     grid-template-columns: 1fr;
@@ -3617,4 +3521,826 @@ header {
 @media (max-width:560px) {
   .app > header { height:74px; }
   .app > header .brand-logo { width:145px; height:64px; }
+}
+
+/* Responsive commerce polish: compact food-ordering rhythm on mobile, generous grid on web. */
+.mobileOrderBar { display:none; }
+@media (min-width: 901px) {
+  .app > main { max-width:1600px; }
+  .intro { padding-inline:clamp(48px,6vw,96px); }
+  .now, .demandstrip, .changes, .market, .dashboard { padding-inline:clamp(48px,6vw,96px); }
+  .marketgrid { gap:32px 22px; }
+  .listing .photo { border-radius:18px; }
+  .listing { border-radius:18px; }
+  .cardbody { padding:16px 4px 8px; }
+}
+@media (max-width: 900px) {
+  body { background:#fffdf8; }
+  .app > header {
+    position:sticky;
+    height:60px;
+    padding:0 16px;
+    box-shadow:none;
+  }
+  .app > header .brand-logo { width:122px; height:54px; }
+  .app > header .avatar { display:none; }
+  .app > header .cart-trigger {
+    width:42px;
+    height:42px;
+    border-radius:12px;
+  }
+  .mobileOrderBar {
+    display:grid;
+    gap:10px;
+    position:sticky;
+    top:60px;
+    z-index:19;
+    padding:8px 14px 12px;
+    background:rgba(255,253,248,.96);
+    border-bottom:1px solid var(--line);
+    backdrop-filter:blur(16px);
+  }
+  .mobileLocation,
+  .mobileSearch {
+    width:100%;
+    border:0;
+    background:transparent;
+    display:flex;
+    align-items:center;
+    text-align:left;
+  }
+  .mobileLocation { gap:9px; color:var(--ashok-red); }
+  .mobileLocation span { display:grid; flex:1; }
+  .mobileLocation b { color:var(--ink); font-size:13px; }
+  .mobileLocation small { color:var(--muted); font-size:10px; margin-top:2px; }
+  .mobileSearch {
+    min-height:45px;
+    gap:10px;
+    padding:0 13px;
+    color:var(--ashok-red);
+    background:#fff;
+    border:1px solid rgba(50,28,27,.14);
+    border-radius:12px;
+    box-shadow:0 3px 12px rgba(50,28,27,.07);
+  }
+  .mobileSearch span { color:#857775; font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .marketRibbon { display:none; }
+  .intro {
+    min-height:calc(100svh - 60px);
+    padding:38px 20px 28px;
+    display:flex;
+    align-items:center;
+    background:linear-gradient(145deg,#fffaf3 0 70%,#f5e2d7 70%);
+  }
+  .intro::before { width:62px; height:62px; left:auto; right:12%; top:10%; opacity:.55; }
+  .intro::after { display:none; }
+  .heroCopy .kicker { font-size:9px; margin:0 0 16px; }
+  .devanagari { font-size:16px; }
+  .heroCopy h1 { font-size:clamp(52px,16vw,70px); line-height:.84; margin:14px 0 18px; letter-spacing:-.055em; }
+  .heroSub { max-width:330px; font-size:14px; line-height:1.5; margin-bottom:22px; }
+  .heroActions { display:grid; grid-template-columns:1fr 1fr; gap:9px; }
+  .heroActions .quantum-btn { min-height:48px; padding:0 10px; justify-content:center; font-size:12px !important; border-radius:12px; white-space:nowrap; }
+  .heroActions button svg { width:16px; }
+  .heroMarket { display:none; }
+  .categoryRail {
+    justify-content:flex-start;
+    gap:8px;
+    padding:18px 14px;
+    overflow-x:auto;
+    scrollbar-width:none;
+    background:#fffdf8;
+  }
+  .categoryRail::-webkit-scrollbar { display:none; }
+  .categoryRail > span { position:sticky; left:0; flex:0 0 auto; font-size:10px; border-radius:999px; padding:9px 12px; z-index:2; }
+  .categoryRail button { flex:0 0 auto; padding:9px 13px; border:1px solid var(--line); border-radius:999px; font-size:10px; background:#fff; }
+  .categoryRail i { display:none; }
+  .sweetAtlas { padding:42px 16px; }
+  .atlasIntro h2 { font-size:40px; }
+  .atlasRail { gap:12px; }
+  .atlasSweet { min-width:150px; }
+  .now, .demandstrip, .changes { padding:38px 16px; }
+  .sectionhead { align-items:flex-start; gap:12px; }
+  .now .sectionhead h2, .demandstrip .sectionhead h2 { font-size:32px; }
+  .sectionhead > button { white-space:nowrap; font-size:11px; }
+  .feature { min-height:390px; border-radius:18px; }
+  .featurecopy { left:6%; bottom:6%; width:86%; }
+  .featurecopy h2 { font-size:32px; }
+  .sidegrid { display:flex; overflow-x:auto; gap:14px; margin-inline:-16px; padding:0 16px 8px; scroll-snap-type:x mandatory; }
+  .sidegrid .listing { flex:0 0 78vw; scroll-snap-align:start; background:#fff; border-radius:16px; overflow:hidden; border:1px solid var(--line); }
+  .sidegrid .photo { height:220px; border-radius:0; }
+  .sidegrid .cardbody { padding:14px; }
+  .market { padding:28px 14px 110px; }
+  .markettitle h1 { font-size:48px; }
+  .marketgrid { grid-template-columns:repeat(2,minmax(0,1fr)); gap:22px 10px; }
+  .marketgrid .photo { height:170px; border-radius:14px; }
+  .marketgrid .cardbody h3 { font-size:14px; margin:6px 0 10px; min-height:34px; }
+  .marketgrid .balance { display:none; }
+  .marketgrid .cardfoot { display:block; margin-top:8px; padding-top:8px; }
+  .marketgrid .cardfoot span { display:block; font-size:11px; margin-top:3px; }
+  .card-add { width:100%; min-height:38px; justify-content:center; border-radius:10px; margin-top:10px; }
+  .mobileNav { height:72px; padding-bottom:env(safe-area-inset-bottom); }
+  .mobileNav button { min-width:58px; }
+}
+@media (max-width: 380px) {
+  .heroCopy h1 { font-size:52px; }
+  .heroActions { grid-template-columns:1fr; }
+  .marketgrid .photo { height:150px; }
+}
+
+/* 21st.dev-inspired mobile interaction layer: elevated dock, tactile controls, crisp contrast. */
+@media (max-width: 900px) {
+  :root { --dock-height:68px; }
+  body { padding-bottom:calc(var(--dock-height) + 28px + env(safe-area-inset-bottom)); }
+  button, a { -webkit-tap-highlight-color:transparent; }
+  button { touch-action:manipulation; }
+
+  .mobileNav {
+    left:12px;
+    right:12px;
+    bottom:12px;
+    width:auto;
+    max-width:460px;
+    margin-inline:auto;
+    height:var(--dock-height);
+    transform:none;
+    padding:6px 8px calc(6px + env(safe-area-inset-bottom));
+    border:1px solid rgba(255,255,255,.78);
+    border-radius:24px;
+    background:rgba(255,253,248,.9);
+    box-shadow:0 18px 50px rgba(50,28,27,.22),0 2px 8px rgba(50,28,27,.1);
+    backdrop-filter:blur(22px) saturate(1.25);
+    justify-content:space-between;
+    overflow:visible;
+  }
+  .mobileNav button {
+    min-width:54px;
+    height:52px;
+    padding:4px 8px;
+    border-radius:16px;
+    color:#6f5c59;
+    transition:transform .2s var(--ease),background .2s ease,color .2s ease;
+  }
+  .mobileNav button span { font-size:9px; font-weight:700; letter-spacing:.01em; }
+  .mobileNav button.active:not(.mobileplus) { color:var(--ashok-red); background:#f8e4e4; }
+  .mobileNav button:active { transform:scale(.9); }
+  .mobileNav .mobileplus {
+    position:relative;
+    width:58px;
+    min-width:58px;
+    height:58px;
+    margin-top:-20px;
+    border:4px solid #fffdf8;
+    border-radius:21px;
+    color:#fff;
+    background:linear-gradient(145deg,#d11a29,#890713);
+    box-shadow:0 12px 24px rgba(184,8,25,.34);
+  }
+  .mobileNav .mobileplus.active { background:linear-gradient(145deg,#edbd3e,#ba7d05); color:#321c1b; }
+  .dockBadge {
+    position:absolute;
+    top:-6px;
+    right:-6px;
+    min-width:20px;
+    height:20px;
+    padding:0 5px;
+    display:grid;
+    place-items:center;
+    border:2px solid #fffdf8;
+    border-radius:999px;
+    background:#321c1b;
+    color:#fff;
+    font-size:10px;
+  }
+
+  .modalback { align-items:flex-end; padding:12px; }
+  .palette { width:100%; max-width:none; border-radius:24px; padding-bottom:calc(12px + env(safe-area-inset-bottom)); }
+  .palette > div { min-height:58px; }
+  .palette > button { min-height:52px; border-radius:14px; }
+
+  .gallery > img, .detailgrid .gallery > img { height:min(55vh,430px); border-radius:0 0 24px 24px; }
+  .transaction { padding:28px 16px 116px; }
+  .transaction h1 { font-size:clamp(42px,13vw,62px); }
+  .seller { padding:14px; border-radius:16px; background:#fff; }
+  .quantity { padding:18px; border-radius:20px; }
+  .stepper { border-radius:16px; overflow:hidden; }
+  .commerce-actions { position:sticky; bottom:92px; z-index:12; padding:8px; margin-inline:-8px; border-radius:18px; background:rgba(255,253,248,.88); backdrop-filter:blur(16px); }
+  .commerce-actions button { min-height:50px; border-radius:14px; }
+
+  .commerce-page { padding:34px 14px 112px; }
+  .commerce-heading h1 { font-size:54px; margin:12px 0 34px; }
+  .cart-lines { border-top:0; }
+  .cart-lines article {
+    grid-template-columns:76px 1fr auto;
+    gap:10px;
+    margin-bottom:12px;
+    padding:12px;
+    border:1px solid var(--line);
+    border-radius:18px;
+    background:#fff;
+  }
+  .cart-lines img { width:76px; height:76px; border-radius:12px; }
+  .cart-lines h2 { font-size:20px; line-height:1; }
+  .cart-stepper { border-radius:12px; overflow:hidden; }
+  .order-summary, .checkout-summary { padding:20px; border-radius:20px; box-shadow:0 14px 40px rgba(50,28,27,.1); }
+  .billing-form { padding:2px; }
+  .billing-form h2, .checkout-summary h2 { font-size:28px; }
+  .form-grid { gap:12px; }
+  .form-grid input, .form-grid textarea, .admin-card input { border-radius:12px; background:#fff; }
+  .cod-box { border-radius:16px; }
+  .coupon-entry { border-radius:14px; overflow:hidden; }
+
+  .quantum-btn, .card-add, .request, .add-cart, .bulk-request {
+    transition:transform .18s var(--ease),box-shadow .18s ease,background .18s ease;
+  }
+  .quantum-btn:active, .card-add:active, .request:active, .add-cart:active, .bulk-request:active { transform:scale(.97); }
+}
+@media (hover:hover) and (pointer:fine) {
+  .mobileNav button:hover { transform:translateY(-4px); color:var(--ashok-red); background:#f8e4e4; }
+  .mobileNav .mobileplus:hover { transform:translateY(-6px) scale(1.04); color:#fff; background:linear-gradient(145deg,#e32636,#9c0715); }
+  .card-add:hover, .add-cart:hover, .bulk-request:hover { background:#fff2f1; border-color:rgba(184,8,25,.5); box-shadow:0 8px 22px rgba(184,8,25,.13); }
+  .request:hover, .heroActions button:first-child:hover { background:#940612; box-shadow:0 10px 28px rgba(184,8,25,.25); }
+}
+
+/* ============================================================
+   COMMERCE CONTROLS — search, category chips, sort, pagination
+   ============================================================ */
+
+.searchbar .searchclear {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(42, 26, 25, 0.07);
+  color: var(--muted);
+}
+.searchbar .searchclear:hover {
+  background: rgba(42, 26, 25, 0.13);
+}
+
+.filterbar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 18px 0 6px;
+}
+
+.chiprail {
+  display: flex;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  scrollbar-width: none;
+  scroll-snap-type: x proximity;
+}
+.chiprail::-webkit-scrollbar {
+  display: none;
+}
+.chiprail button {
+  flex: 0 0 auto;
+  scroll-snap-align: start;
+  padding: 9px 15px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  transition:
+    background 0.18s ease,
+    border-color 0.18s ease,
+    color 0.18s ease;
+}
+.chiprail button:hover {
+  border-color: rgba(184, 8, 25, 0.42);
+}
+.chiprail button.on {
+  border-color: var(--ashok-red);
+  background: var(--ashok-red);
+  color: #fff;
+}
+
+/* ---- sort ---- */
+
+.sortwrap {
+  position: relative;
+  flex: 0 0 auto;
+}
+.sortbtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 38px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #fff;
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.sortbtn.on {
+  border-color: var(--ashok-red);
+  color: var(--ashok-red);
+}
+.sortscrim {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+}
+.sortmenu {
+  position: absolute;
+  z-index: 31;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 216px;
+  margin: 0;
+  padding: 6px;
+  list-style: none;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 18px 44px rgba(40, 20, 18, 0.18);
+}
+.sortmenu button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 9px;
+  background: none;
+  font-size: 13px;
+  text-align: left;
+}
+.sortmenu button:hover {
+  background: #f6f2ea;
+}
+.sortmenu button.on {
+  color: var(--ashok-red);
+  font-weight: 600;
+}
+
+/* ---- results header + pagination ---- */
+
+.resultshead .clearall {
+  border: 0;
+  background: none;
+  color: var(--ashok-red);
+  font-size: 12.5px;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.loadmore {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  max-width: 320px;
+  min-height: 50px;
+  margin: 32px auto 0;
+  border: 1px solid var(--ashok-red);
+  border-radius: 14px;
+  background: #fff;
+  color: var(--ashok-red);
+  font-size: 14px;
+  font-weight: 600;
+}
+.loadmore:hover {
+  background: #fdeff0;
+}
+
+/* ---- craving chips inside the sticky mobile bar ---- */
+
+.mobileCravings {
+  display: none;
+}
+
+/* ============================================================
+   SECTION ORDER — every breakpoint
+   The home view is a shop, so the product rails come before the
+   editorial. Ordering lives on the flex container rather than in the
+   JSX so the markup keeps its reading order for screen readers.
+   ============================================================ */
+
+.app > main {
+  display: flex;
+  flex-direction: column;
+}
+
+.intro { order: 1; }
+.hot-selling { order: 2; }
+.categoryRail { order: 3; }
+.now { order: 4; }
+.demandstrip { order: 5; }
+.sweetAtlas { order: 6; }
+.changes { order: 7; }
+.about-home { order: 8; }
+
+/* The market header already says how many sweets there are; the static
+   tagline used to double up on it. */
+.resultshead b::after {
+  content: none;
+}
+
+/* ============================================================
+   MOBILE ORDERING LAYER
+   A food-ordering surface, not a magazine: location and search stay
+   pinned, and the product rails are pulled above the editorial.
+   ============================================================ */
+
+@media (max-width: 900px) {
+  /* The sticky bar now rides along on the home view too, so it needs to
+     clear the header on both. */
+  .mobileOrderBar {
+    gap: 8px;
+    padding: 8px 14px 10px;
+  }
+
+  .mobileLocation {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    width: 100%;
+    color: var(--ashok-red);
+  }
+
+  .mobileCravings {
+    display: flex;
+    gap: 7px;
+    overflow-x: auto;
+    margin: 0 -14px;
+    padding: 1px 14px 2px;
+    scrollbar-width: none;
+  }
+  .mobileCravings::-webkit-scrollbar {
+    display: none;
+  }
+  .mobileCravings button {
+    flex: 0 0 auto;
+    padding: 7px 13px;
+    border: 1px solid rgba(184, 8, 25, 0.22);
+    border-radius: 999px;
+    background: #fff;
+    color: var(--ashok-red);
+    font-size: 11.5px;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  .mobileCravings button:active {
+    background: #fdeff0;
+  }
+
+  /* The hero becomes a compact banner instead of a full screen, so the
+     first product rail is reachable without a deliberate scroll. */
+  .intro {
+    min-height: 0;
+    padding: 26px 20px 30px;
+  }
+  .heroCopy h1 {
+    font-size: clamp(40px, 12vw, 54px);
+    margin: 10px 0 14px;
+  }
+  .heroSub {
+    max-width: none;
+    margin-bottom: 18px;
+    font-size: 13.5px;
+  }
+  .devanagari { font-size: 15px; }
+
+  /* Filter row: chips scroll, sort stays pinned to the right. */
+  .filterbar {
+    gap: 10px;
+    margin: 14px 0 4px;
+  }
+  .chiprail {
+    margin-inline: -14px;
+    padding-inline: 14px;
+  }
+  .chiprail button {
+    padding: 8px 13px;
+    font-size: 12px;
+  }
+  .sortbtn {
+    height: 36px;
+    padding: 0 11px;
+    font-size: 12px;
+  }
+  .sortmenu {
+    width: 200px;
+  }
+  .resultshead {
+    padding-top: 12px;
+  }
+  .loadmore {
+    max-width: none;
+    margin-top: 24px;
+  }
+}
+
+@media (max-width: 560px) {
+  /* Keep the sort label from crowding out the chips on small phones. */
+  .sortbtn {
+    gap: 5px;
+    max-width: 132px;
+  }
+  .sortbtn > svg:last-child {
+    flex: 0 0 auto;
+  }
+}
+
+/* ============================================================
+   DESKTOP ORDERING LAYER
+   Same intent as the mobile layer: the browse controls stay within
+   reach and products start above the fold instead of after a
+   full-height title block.
+   ============================================================ */
+
+@media (min-width: 901px) {
+  /* The market was opening on a 128px display headline; the search
+     field sat below the fold. Give the page a working header instead. */
+  .market {
+    padding: 34px 5vw 80px;
+  }
+
+  .markettitle h1 {
+    font-size: clamp(38px, 3.6vw, 56px);
+    line-height: 1.02;
+  }
+
+  .markettitle p {
+    max-width: 62ch;
+  }
+
+  .searchbar {
+    margin-top: 22px;
+  }
+
+  .searchbar input {
+    font-size: 17px;
+  }
+
+  /* Chips and sort ride under the site header while the grid scrolls,
+     so refining a search never needs a trip back to the top. */
+  .filterbar {
+    position: sticky;
+    top: 82px;
+    z-index: 12;
+    margin: 18px 0 0;
+    padding: 12px 0 10px;
+    background: linear-gradient(
+      var(--paper, #fffaf0) 78%,
+      rgba(255, 250, 240, 0)
+    );
+  }
+
+  .resultshead {
+    position: sticky;
+    top: 148px;
+    z-index: 11;
+    padding: 12px 0;
+    background: var(--paper, #fffaf0);
+  }
+
+  /* Denser grid: more sweets per screen, shorter photos. */
+  .marketgrid {
+    gap: 30px 20px;
+  }
+
+  .marketgrid .photo {
+    height: 260px;
+  }
+
+  /* The hero is a banner above the product rails, not a landing page. */
+  .intro {
+    min-height: min(74vh, 620px);
+    padding-block: 54px 46px;
+  }
+
+  .heroCopy h1 {
+    font-size: clamp(56px, 5.4vw, 92px);
+  }
+
+  .heroSub {
+    font-size: clamp(16px, 1.05vw, 19px);
+  }
+
+  /* The editorial sections were each a full screen tall. Trimmed, the
+     whole home page fits in roughly two fewer scrolls. */
+  .sweetAtlas {
+    min-height: 0;
+    padding-block: 70px;
+  }
+
+  .hot-selling,
+  .now,
+  .demandstrip {
+    padding-block: 66px;
+  }
+}
+
+@media (min-width: 1500px) {
+  /* Wide screens get a fifth column rather than wider cards. */
+  .marketgrid {
+    grid-template-columns: repeat(5, 1fr);
+  }
+}
+
+/* ============================================================
+   STICKY CART TOTAL — mobile
+   The total and the next step stay in view; on desktop the summary
+   column already does that job, so the bar is not rendered.
+   ============================================================ */
+
+.cart-sticky {
+  display: none;
+}
+
+@media (max-width: 900px) {
+  .cart-sticky {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: calc(88px + env(safe-area-inset-bottom));
+    z-index: 40;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    padding: 11px 16px;
+    border-top: 1px solid rgba(42, 26, 25, 0.1);
+    background: #fffdf6;
+    box-shadow: 0 -8px 26px rgba(40, 20, 18, 0.12);
+  }
+
+  .cart-sticky span {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    line-height: 1.25;
+  }
+
+  .cart-sticky small {
+    color: var(--muted, #7a6a63);
+    font-size: 11px;
+  }
+
+  .cart-sticky b {
+    font-size: 19px;
+    font-weight: 700;
+    color: var(--ashok-red, #b80819);
+  }
+
+  .cart-sticky button {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    flex: 0 0 auto;
+    padding: 13px 18px;
+    border: 0;
+    border-radius: 12px;
+    background: var(--ashok-red, #b80819);
+    color: #fff;
+    font-size: 14px;
+    font-weight: 650;
+  }
+
+  .cart-sticky button svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  /* Clear the bar so the last line item is never trapped behind it. */
+  .cart-page .cart-layout {
+    padding-bottom: 168px;
+  }
+
+  /* The floating guide steps up so it never lands on the total. */
+  .cart-page ~ .guide-root,
+  body:has(.cart-page) .guide-root {
+    bottom: calc(176px + env(safe-area-inset-bottom));
+  }
+}
+
+/* ============================================================
+   MOBILE MARKET HEADER
+   The market view carries a real search field, so the pinned bar's
+   search shortcut would be a second, redundant entry point ~400px
+   away from it. Drop the shortcut there and compact the title, which
+   lifts the first row of sweets onto the opening screen.
+   ============================================================ */
+
+@media (max-width: 900px) {
+  body:has(main.market) .mobileOrderBar .mobileSearch {
+    display: none;
+  }
+
+  .market {
+    padding: 18px 20px 70px;
+  }
+
+  .markettitle {
+    margin-bottom: 4px;
+  }
+
+  .markettitle h1 {
+    font-size: clamp(30px, 8.5vw, 38px);
+    line-height: 1.06;
+  }
+
+  .markettitle .kicker {
+    font-size: 10.5px;
+  }
+
+  /* Keep the kicker as a page label; drop only the descriptive blurb. */
+  .markettitle p:not(.kicker) {
+    display: none;
+  }
+
+  .searchbar {
+    margin-top: 16px;
+    padding: 8px 0;
+  }
+
+  .searchbar input {
+    font-size: 16px; /* 16px keeps iOS from zooming the page on focus */
+  }
+}
+
+/* The chip rail scrolls under the pinned sort control, so it needs a
+   fade at the trailing edge — otherwise the last visible chip just
+   looks truncated. */
+.chiprail {
+  -webkit-mask-image: linear-gradient(
+    to right,
+    #000 calc(100% - 26px),
+    transparent
+  );
+  mask-image: linear-gradient(to right, #000 calc(100% - 26px), transparent);
+}
+
+/* ============================================================
+   MOBILE SECTION HEADERS
+   The editorial section intros were written for a desktop canvas: on a
+   phone the hot-selling rail spent ~340px on a headline and a
+   description before the first sweet appeared. Keep the headline as a
+   label, drop the explanatory paragraph, and shorten the cards so two
+   are always partly in view — the rail then reads as scrollable.
+   ============================================================ */
+
+@media (max-width: 900px) {
+  .hot-copy {
+    padding-bottom: 4px;
+  }
+
+  .hot-copy h2 {
+    font-size: clamp(28px, 8vw, 36px);
+    line-height: 1.08;
+  }
+
+  .hot-copy > p:not(.kicker) {
+    display: none;
+  }
+
+  .hot-scroll > * {
+    width: 62vw;
+    max-width: 260px;
+  }
+}
+
+/* Anything scrolled to programmatically (an anchor, a focused field)
+   must clear the sticky header stack rather than land underneath it. */
+html {
+  scroll-padding-top: 96px;
+}
+
+@media (max-width: 900px) {
+  html {
+    scroll-padding-top: 210px;
+  }
+}
+
+/* PHOTO PLACEHOLDER
+   Categories the shop has no honest photograph for render a graphic stand-in
+   instead of a stock picture of the wrong sweet. It is a flat SVG, so the
+   hover zoom and saturation lift that flatter a real photograph only make it
+   look broken — hold it still and let it sit on the paper ground. */
+.photo:has(img[src$="_placeholder.svg"]) {
+  background: var(--canvas);
+}
+.photo img[src$="_placeholder.svg"] {
+  object-fit: contain;
+}
+.listing:hover .photo img[src$="_placeholder.svg"] {
+  transform: none;
+  filter: none;
 }

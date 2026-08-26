@@ -9,3 +9,6 @@ tsconfig.tsbuildinfo
 tmp/
 upload/
 .DS_Store
+
+# Local agent/editor tooling (dev-server launch config, local settings)
+.claude/
