@@ -37,9 +37,9 @@ const RULES: Rule[] = [
       "Delivery across Dombivli usually takes 30–45 minutes. Orders above ₹1,499 ship free; below that it is ₹99. Pickup from either store is always free.",
   },
   {
-    match: /pay|payment|upi|card|razorpay|cod|cash/i,
+    match: /pay|payment|upi|card|online|cod|cash/i,
     reply:
-      "Payment goes through Razorpay Secure — UPI, cards, netbanking and wallets. We never see or store your card details.",
+      "Cash on delivery only — you pay the rider when the sweets reach you. Nothing is charged in advance, and we do not take UPI, cards or netbanking on the site. Please keep the exact amount ready, as riders may not carry change.",
   },
   {
     match: /fresh|stale|shelf|store it|storage|keep|expire|best before/i,

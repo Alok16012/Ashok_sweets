@@ -29,7 +29,7 @@ import {
   HeartHandshake,
   Zap,
   ShoppingCart,
-  CreditCard,
+  Wallet,
   TicketPercent,
   Settings,
   Trash2,
@@ -96,11 +96,6 @@ type SiteView =
   | "adminLogin"
   | "admin"
   | "legal";
-declare global {
-  interface Window {
-    Razorpay?: new (options: Record<string, unknown>) => { open: () => void };
-  }
-}
 /* The generated placeholder catalogue that used to live here (featuredItems,
    sweetNames, sweetImages and the legacyItems it built) went unused once
    `items` began reading the real catalogue, but still shipped in the bundle. */
@@ -1060,8 +1055,11 @@ function App() {
       {view === "checkout" && (
         <Checkout
           cart={cart}
-          done={() => {
+          done={(order) => {
             setCart([]);
+            setToast(
+              `Order ${order.id} placed — ₹${order.total.toLocaleString()} payable on delivery`,
+            );
             nav("dashboard");
           }}
         />
@@ -1331,8 +1329,8 @@ function Detail({
               )}
             </button>
             <p className="safe">
-              <ShieldCheck /> Secure billing. Razorpay checkout is used for
-              online payments.
+              <ShieldCheck /> Cash on delivery. Pay the rider when your order
+              arrives — nothing is charged in advance.
             </p>
           </div>
           <div className="detailactions">
@@ -1742,7 +1740,7 @@ function CartPage({
               </div>
               <div>
                 <dt>Estimated GST</dt>
-                <dd>Calculated at billing</dd>
+                <dd>Calculated at checkout</dd>
               </div>
             </dl>
             <div className="summary-total">
@@ -1752,10 +1750,10 @@ function CartPage({
               </b>
             </div>
             <button className="request quantum-btn" onClick={checkout}>
-              Proceed to billing <ArrowUpRight />
+              Proceed to checkout <ArrowUpRight />
             </button>
             <small>
-              <ShieldCheck /> Secure payment through Razorpay
+              <ShieldCheck /> Cash on delivery — pay when it arrives
             </small>
           </aside>
 
@@ -1774,7 +1772,7 @@ function CartPage({
               </b>
             </span>
             <button onClick={checkout}>
-              Proceed to billing <ArrowUpRight />
+              Proceed to checkout <ArrowUpRight />
             </button>
           </div>
         </div>
@@ -1783,32 +1781,75 @@ function CartPage({
   );
 }
 
-/**
- * Razorpay's checkout script is ~90KB and only ever needed once someone
- * actually pays, so it is fetched on demand rather than in <head>.
- */
-let razorpayLoader: Promise<void> | null = null;
-function loadRazorpay(): Promise<void> {
-  if (window.Razorpay) return Promise.resolve();
-  if (razorpayLoader) return razorpayLoader;
-  razorpayLoader = new Promise<void>((resolve, reject) => {
-    const script = document.createElement("script");
-    script.src = "https://checkout.razorpay.com/v1/checkout.js";
-    script.async = true;
-    script.onload = () => resolve();
-    script.onerror = () => {
-      razorpayLoader = null;
-      reject(new Error("Razorpay checkout could not be loaded"));
-    };
-    document.head.appendChild(script);
-  });
-  return razorpayLoader;
+/* Cash on delivery is the only way to pay, so placing an order is the whole
+   transaction — there is no payment provider keeping a second copy. The order
+   has to be written down here or it does not exist anywhere. */
+export const ORDERS_KEY = "ashok-orders";
+export type Order = {
+  id: string;
+  placedAt: string;
+  name: string;
+  phone: string;
+  email: string;
+  address: string;
+  city: string;
+  pin: string;
+  note: string;
+  lines: { title: string; qty: number; price: number }[];
+  subtotal: number;
+  delivery: number;
+  discount: number;
+  total: number;
+  coupon: string;
+  status: "placed" | "confirmed" | "out" | "delivered" | "cancelled";
+};
+
+export function readOrders(): Order[] {
+  try {
+    const raw = JSON.parse(localStorage.getItem(ORDERS_KEY) || "[]");
+    return Array.isArray(raw) ? (raw as Order[]) : [];
+  } catch {
+    return [];
+  }
 }
 
-function Checkout({ cart, done }: { cart: CartLine[]; done: () => void }) {
+/* Indian mobile numbers are ten digits opening 6-9. The rider phones this
+   number to find the door, so a typo here costs a delivery, not a form error. */
+const PHONE = /^[6-9]\d{9}$/;
+const PIN = /^\d{6}$/;
+
+function Checkout({ cart, done }: { cart: CartLine[]; done: (o: Order) => void }) {
   const [coupon, setCoupon] = useState("");
   const [applied, setApplied] = useState(0);
+  const [appliedCode, setAppliedCode] = useState("");
   const [status, setStatus] = useState("");
+  const [placing, setPlacing] = useState(false);
+  const [touched, setTouched] = useState(false);
+  const [form, setForm] = useState({
+    name: "",
+    phone: "",
+    email: "",
+    address: "",
+    city: "Dombivli",
+    pin: "",
+    note: "",
+  });
+  const set = (k: keyof typeof form) => (
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
+  ) => setForm((f) => ({ ...f, [k]: e.target.value }));
+
+  const errors: Partial<Record<keyof typeof form, string>> = {};
+  if (!form.name.trim()) errors.name = "Who should the rider ask for?";
+  if (!PHONE.test(form.phone.replace(/\D/g, "").slice(-10)))
+    errors.phone = "Ten digits, starting 6 to 9.";
+  if (form.email.trim() && !form.email.includes("@"))
+    errors.email = "That does not look like an email address.";
+  if (form.address.trim().length < 12)
+    errors.address = "Add the house or flat number and a landmark.";
+  if (!form.city.trim()) errors.city = "Required.";
+  if (!PIN.test(form.pin.trim())) errors.pin = "Six digits.";
+  const valid = Object.keys(errors).length === 0;
+
   const subtotal = cart.reduce((s, l) => s + l.item.price * l.qty, 0);
   const delivery = subtotal >= 1499 ? 0 : 99;
   const total = Math.max(
@@ -1831,66 +1872,58 @@ function Checkout({ cart, done }: { cart: CartLine[]; done: () => void }) {
     );
     if (found) {
       setApplied(found.discount);
+      setAppliedCode(found.code);
       setStatus(`${found.code} applied — ${found.discount}% off`);
     } else setStatus("This coupon is invalid or inactive.");
   };
-  const pay = async () => {
-    const key = import.meta.env.VITE_RAZORPAY_KEY_ID;
-    if (!key) {
+
+  const placeOrder = () => {
+    setTouched(true);
+    if (!valid || !cart.length || placing) {
+      if (!valid) setStatus("Please complete the delivery details above.");
+      return;
+    }
+    setPlacing(true);
+    const order: Order = {
+      id: `AS${Date.now().toString(36).toUpperCase()}`,
+      placedAt: new Date().toISOString(),
+      name: form.name.trim(),
+      phone: form.phone.replace(/\D/g, "").slice(-10),
+      email: form.email.trim(),
+      address: form.address.trim(),
+      city: form.city.trim(),
+      pin: form.pin.trim(),
+      note: form.note.trim(),
+      lines: cart.map((l) => ({
+        title: l.item.title,
+        qty: l.qty,
+        price: l.item.price,
+      })),
+      subtotal,
+      delivery,
+      discount: Math.round((subtotal * applied) / 100),
+      total,
+      coupon: appliedCode,
+      status: "placed",
+    };
+    try {
+      localStorage.setItem(ORDERS_KEY, JSON.stringify([order, ...readOrders()]));
+    } catch {
+      /* A full or blocked localStorage must not swallow the order silently. */
+      setPlacing(false);
       setStatus(
-        "Razorpay test mode is ready. Add the merchant Key ID and server Orders API to activate payment collection.",
+        "This browser would not save the order. Please call the shop on 0251 242 1234 to place it.",
       );
       return;
     }
-    setStatus("Creating a secure Razorpay order…");
-    try {
-      await loadRazorpay();
-      const response = await fetch("/api/razorpay/order", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          amount: total * 100,
-          currency: "INR",
-          receipt: `ashok-${Date.now()}`,
-        }),
-      });
-      if (!response.ok) throw new Error("Order service unavailable");
-      const order = await response.json();
-      new window.Razorpay!({
-        key,
-        amount: total * 100,
-        currency: "INR",
-        name: "Nakhye’s Ashok Sweets",
-        description: "Sweet order",
-        image: `${location.origin}/brand/ashok-sweets-mark.jpg`,
-        order_id: order.id,
-        theme: { color: "#b80819" },
-        handler: async (payment: Record<string, string>) => {
-          setStatus("Payment received. Verifying your order…");
-          const verification = await fetch("/api/razorpay/verify", {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify(payment),
-          });
-          if (!verification.ok) {
-            setStatus("Payment verification failed. Please do not retry until support checks the transaction.");
-            return;
-          }
-          done();
-        },
-      }).open();
-    } catch {
-      setStatus(
-        "Payment could not start. Please retry or order through WhatsApp.",
-      );
-    }
+    done(order);
   };
   return (
     <main className="checkout-page commerce-page">
       <div className="commerce-heading">
-        <p className="kicker">SECURE CHECKOUT</p>
+        <p className="kicker">CASH ON DELIVERY</p>
         <h1>
-          Billing & <em>payment.</em>
+          Where should we <em>deliver?</em>
         </h1>
       </div>
       <div className="checkout-grid">
@@ -1899,37 +1932,92 @@ function Checkout({ cart, done }: { cart: CartLine[]; done: () => void }) {
           <div className="form-grid">
             <label>
               Full name
-              <input placeholder="Your name" />
+              <input
+                value={form.name}
+                onChange={set("name")}
+                autoComplete="name"
+                placeholder="Your name"
+                aria-invalid={touched && !!errors.name}
+              />
+              {touched && errors.name && <em className="fielderr">{errors.name}</em>}
             </label>
             <label>
               Mobile number
-              <input inputMode="tel" placeholder="+91" />
+              <input
+                value={form.phone}
+                onChange={set("phone")}
+                inputMode="tel"
+                autoComplete="tel"
+                placeholder="98XXXXXXXX"
+                aria-invalid={touched && !!errors.phone}
+              />
+              {touched && errors.phone && <em className="fielderr">{errors.phone}</em>}
             </label>
             <label className="wide">
-              Email
-              <input type="email" placeholder="you@example.com" />
+              Email <small className="optional">optional</small>
+              <input
+                value={form.email}
+                onChange={set("email")}
+                type="email"
+                autoComplete="email"
+                placeholder="you@example.com"
+                aria-invalid={touched && !!errors.email}
+              />
+              {touched && errors.email && <em className="fielderr">{errors.email}</em>}
             </label>
             <label className="wide">
               Delivery address
-              <textarea placeholder="House, street, landmark" />
+              <textarea
+                value={form.address}
+                onChange={set("address")}
+                autoComplete="street-address"
+                placeholder="Flat / house number, building, street, landmark"
+                aria-invalid={touched && !!errors.address}
+              />
+              {touched && errors.address && <em className="fielderr">{errors.address}</em>}
             </label>
             <label>
               City
-              <input defaultValue="Dombivli" />
+              <input
+                value={form.city}
+                onChange={set("city")}
+                autoComplete="address-level2"
+                aria-invalid={touched && !!errors.city}
+              />
+              {touched && errors.city && <em className="fielderr">{errors.city}</em>}
             </label>
             <label>
               PIN code
-              <input inputMode="numeric" placeholder="421202" />
+              <input
+                value={form.pin}
+                onChange={set("pin")}
+                inputMode="numeric"
+                autoComplete="postal-code"
+                placeholder="421202"
+                aria-invalid={touched && !!errors.pin}
+              />
+              {touched && errors.pin && <em className="fielderr">{errors.pin}</em>}
+            </label>
+            <label className="wide">
+              Delivery note <small className="optional">optional</small>
+              <input
+                value={form.note}
+                onChange={set("note")}
+                placeholder="Ring the bell twice, leave with the watchman…"
+              />
             </label>
           </div>
           <h2>Payment</h2>
-          <div className="razorpay-box">
-            <div className="razor-mark">R</div>
+          <div className="cod-box">
+            <Wallet />
             <span>
-              <b>Razorpay Secure</b>
-              <small>UPI · Cards · Netbanking · Wallets</small>
+              <b>Cash on delivery</b>
+              <small>
+                Pay the rider in cash when your sweets arrive. Please keep the
+                exact amount ready — riders may not carry change.
+              </small>
             </span>
-            <ShieldCheck />
+            <Check />
           </div>
         </section>
         <aside className="checkout-summary">
@@ -1985,19 +2073,19 @@ function Checkout({ cart, done }: { cart: CartLine[]; done: () => void }) {
             </div>
           </dl>
           <div className="summary-total">
-            <span>Payable</span>
+            <span>Pay on delivery</span>
             <b>₹{total.toLocaleString()}</b>
           </div>
           <button
-            disabled={!cart.length}
+            disabled={!cart.length || placing}
             className="request quantum-btn"
-            onClick={pay}
+            onClick={placeOrder}
           >
-            <CreditCard /> Pay securely ₹{total.toLocaleString()}
+            <Wallet /> Place order · ₹{total.toLocaleString()} on delivery
           </button>
           <small>
-            Test-mode payment preview. Live collection requires server-side
-            Razorpay order creation and credentials.
+            No advance payment. We call to confirm before the order leaves the
+            shop.
           </small>
         </aside>
       </div>
@@ -2207,18 +2295,18 @@ function LegalPage() {
             <p className="kicker">01 · TERMS OF USE AND SALE</p>
             <h2>Ordering from Ashok Sweets</h2>
             <p>By browsing this website, creating an account or placing an order, you agree to these terms. “Ashok Sweets”, “we”, “us” and “our” refer to M/S Nakhye Foods LLP. “Customer”, “you” and “your” refer to the person using the service or purchasing products.</p>
-            <h3>Products and availability</h3><p>We sell vegetarian sweets, gift packs and related food products. Product photographs are representative; handmade sweets may differ slightly in colour, shape, garnish and arrangement. Availability, batch size and delivery estimates may change. An order is accepted only when we confirm it and, for prepaid orders, receive successful payment confirmation.</p>
-            <h3>Pricing, taxes and coupons</h3><p>Prices are displayed in Indian Rupees and will show applicable taxes, delivery charges and discounts before payment. Coupons are non-transferable, subject to stated validity, minimum-order and product restrictions, and may be withdrawn where issued in error, misused or prohibited by law. Unless expressly stated, offers cannot be combined.</p>
+            <h3>Products and availability</h3><p>We sell vegetarian sweets, gift packs and related food products. Product photographs are representative; handmade sweets may differ slightly in colour, shape, garnish and arrangement. Availability, batch size and delivery estimates may change. All orders are cash on delivery; we do not collect advance payment. An order is accepted only when we confirm it, usually by telephone, and payment is collected in cash at the door.</p>
+            <h3>Pricing, taxes and coupons</h3><p>Prices are displayed in Indian Rupees and show applicable taxes, delivery charges and discounts before you place the order; that displayed total is the amount payable in cash on delivery. Coupons are non-transferable, subject to stated validity, minimum-order and product restrictions, and may be withdrawn where issued in error, misused or prohibited by law. Unless expressly stated, offers cannot be combined.</p>
             <h3>Food information and allergies</h3><p>Customers must review product descriptions, ingredient and allergen information on the pack and contact us before ordering if they have an allergy or intolerance. Products may be prepared in facilities that handle milk, nuts, gluten, sesame and other allergens. Never rely only on product imagery or a search filter for medical or allergen decisions.</p>
-            <h3>Acceptable use</h3><p>You must provide accurate billing and delivery information, use only a payment method you are authorised to use, and not interfere with the website, attempt unauthorised administration access, scrape content, introduce malware, misuse coupons or place fraudulent orders.</p>
+            <h3>Acceptable use</h3><p>You must provide an accurate delivery address and a reachable mobile number, be available to receive and pay for the order, and not interfere with the website, attempt unauthorised administration access, scrape content, introduce malware, misuse coupons or place fraudulent orders.</p>
             <h3>Intellectual property and liability</h3><p>The Ashok Sweets name, submitted logo, packaging artwork, website design, copy and original content belong to or are licensed to M/S Nakhye Foods LLP. To the extent permitted by law, we are not liable for indirect or consequential loss, but nothing in these terms excludes liability or consumer remedies that cannot lawfully be excluded.</p>
           </section>
           <section id="privacy">
             <p className="kicker">02 · PRIVACY POLICY</p>
             <h2>How we use your information</h2>
-            <p>We may collect identity and contact details, delivery address, order history, customer-support messages, coupon use, device and usage data, and payment status. Card, UPI or net-banking credentials are entered into the payment provider’s secure interface; we should not store full card or UPI authentication credentials.</p>
-            <h3>Purposes</h3><p>We use information to create and fulfil orders, collect or reconcile payment, deliver products, issue invoices, prevent fraud, answer requests, manage recalls or food-safety matters, maintain the service, comply with law and—with separate consent where required—send offers. We limit collection to information reasonably necessary for these purposes.</p>
-            <h3>Sharing and processors</h3><p>Information may be shared on a need-to-know basis with Razorpay or another configured payment provider, delivery partners, hosting/database providers such as Vercel and Supabase, messaging providers, professional advisers and public authorities where legally required. Each production provider must be contracted and configured with appropriate security and access controls.</p>
+            <p>We may collect identity and contact details, delivery address, order history, customer-support messages, coupon use, and device and usage data. Because every order is cash on delivery, we do not ask for and never receive card, UPI or net-banking credentials.</p>
+            <h3>Purposes</h3><p>We use information to create and fulfil orders, reconcile cash collected on delivery, deliver products, issue invoices, prevent fraud, answer requests, manage recalls or food-safety matters, maintain the service, comply with law and—with separate consent where required—send offers. We limit collection to information reasonably necessary for these purposes.</p>
+            <h3>Sharing and processors</h3><p>Information may be shared on a need-to-know basis with delivery partners, hosting/database providers such as Vercel and Supabase, messaging providers, professional advisers and public authorities where legally required. Each production provider must be contracted and configured with appropriate security and access controls.</p>
             <h3>Retention, security and choices</h3><p>We retain data only for the order, legal, accounting, fraud-prevention and dispute periods applicable to it, then delete or anonymise it where feasible. We use role-based access, encryption in transit, restricted production credentials, logging and backups appropriate to the risk. No internet service is completely secure. You may request access, correction, erasure or withdrawal of optional consent, subject to legal retention and transaction requirements, through the contact below.</p>
             <h3>Cookies</h3><p>Essential storage may keep cart contents, security state and preferences. Analytics or advertising cookies should remain disabled until a consent mechanism and the relevant vendor disclosures are implemented.</p>
           </section>
