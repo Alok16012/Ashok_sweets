@@ -35,25 +35,7 @@ import {
 } from "lucide-react";
 import "./styles.css";
 
-type Item = {
-  id: number;
-  kind: "supply" | "demand";
-  title: string;
-  category: string;
-  available: number;
-  requested: number;
-  unit: string;
-  price: number;
-  place: string;
-  distance: string;
-  seller: string;
-  rating: string;
-  image: string;
-  note: string;
-  expiry: string;
-  match?: string;
-};
-type CartLine = { item: Item; qty: number };
+type CartLine = { item: AppProduct; qty: number };
 type SiteView =
   | "discover"
   | "market"
@@ -70,7 +52,141 @@ declare global {
     Razorpay?: new (options: Record<string, unknown>) => { open: () => void };
   }
 }
-const featuredItems: Item[] = [
+// --- Client API integration ---
+type ClientVariant = {
+  id: number;
+  title: string;
+  price: string;
+  compare_at_price?: string;
+  sku: string;
+  quantity: number;
+  grams: number;
+  weight?: number;
+  weight_unit?: string;
+  option_values?: Record<string, string>;
+};
+
+type ClientProduct = {
+  id: number;
+  title: string;
+  body_html?: string;
+  vendor?: string;
+  product_type?: string;
+  handle?: string;
+  tags?: string;
+  status?: string;
+  variants: ClientVariant[];
+  image?: { src?: string };
+  image_url?: string;
+  options?: { name: string; values: string[] }[];
+};
+
+type ClientCollection = {
+  id: number;
+  title: string;
+  handle: string;
+  description?: string;
+  image_url?: string;
+  products_count?: number;
+};
+
+type AppProduct = {
+  id: number;
+  kind: "supply" | "demand";
+  title: string;
+  category: string;
+  available: number;
+  requested: number;
+  unit: string;
+  price: number;
+  place: string;
+  distance: string;
+  seller: string;
+  rating: string;
+  image: string;
+  note: string;
+  expiry: string;
+  match?: string;
+  sku?: string;
+  client_id?: number;
+  handle?: string;
+};
+
+function mapClientToApp(product: ClientProduct): AppProduct {
+  const mainImage = product.image?.src || product.image_url || "";
+  const category = product.product_type || product.vendor || "Sweets";
+  const variant = product.variants?.[0];
+  const stock = variant?.quantity ?? 0;
+  const price = Number(variant?.price || 0);
+
+  return {
+    id: product.id,
+    kind: "supply",
+    title: product.title,
+    category,
+    available: stock,
+    requested: Math.max(0, 20 - stock),
+    unit: variant?.grams && variant.grams > 1000 ? "kg" : "boxes",
+    price: Number.isFinite(price) ? price : 0,
+    place: "Dombivli",
+    distance: "In store",
+    seller: product.vendor || "Nakhye’s Ashok Sweets",
+    rating: product.status === "active" ? "Fresh" : "Unavailable",
+    image: mainImage,
+    note: product.body_html
+      ? product.body_html.replace(/<[^>]*>/g, "").slice(0, 100)
+      : variant
+        ? `${variant.sku} · ${variant.weight_unit || ""}`.trim()
+        : "",
+    expiry: product.status === "active" ? "available now" : "out of stock",
+    sku: variant?.sku,
+    client_id: product.id,
+    handle: product.handle,
+  };
+}
+
+async function fetchProductsFromClient(): Promise<AppProduct[]> {
+  try {
+    const res = await fetch("/api/client/products");
+    const data = await res.json();
+    if (data.success && Array.isArray(data.products)) {
+      return data.products.map(mapClientToApp);
+    }
+    return [];
+  } catch {
+    return [];
+  }
+}
+
+async function fetchProductsFromCollection(handleOrId: string): Promise<AppProduct[]> {
+  try {
+    const url = new URL("/api/client/collection-products", window.location.origin);
+    url.searchParams.set("handle", handleOrId);
+    const res = await fetch(url.toString());
+    const data = await res.json();
+    if (data.success && Array.isArray(data.products)) {
+      return data.products.map(mapClientToApp);
+    }
+    return [];
+  } catch {
+    return [];
+  }
+}
+
+async function fetchCollectionsFromClient(): Promise<ClientCollection[]> {
+  try {
+    const res = await fetch("/api/client/collections");
+    const data = await res.json();
+    if (data.success && Array.isArray(data.collections)) {
+      return data.collections;
+    }
+    return [];
+  } catch {
+    return [];
+  }
+}
+
+const FALLBACK_ITEMS: AppProduct[] = [
   {
     id: 1,
     kind: "supply",
@@ -88,6 +204,9 @@ const featuredItems: Item[] = [
       "https://static.wixstatic.com/media/57b89c_9a4a7311b25a41439084b657062603aa~mv2.jpg/v1/fill/w_980,h_1307,al_c,q_85/57b89c_9a4a7311b25a41439084b657062603aa~mv2.jpg",
     note: "Made this morning · 12 handcrafted pieces",
     expiry: "best before 4 days",
+    sku: "AS-KP-001",
+    client_id: 1,
+    handle: "kesar-pista-festive-box",
   },
   {
     id: 2,
@@ -107,6 +226,9 @@ const featuredItems: Item[] = [
     note: "Nine-piece boxes · rose and pistachio preferred",
     expiry: "needed by 18 Aug",
     match: "Strong match",
+    sku: "AS-WM-002",
+    client_id: 2,
+    handle: "wedding-favour-mithai-boxes",
   },
   {
     id: 3,
@@ -124,43 +246,9 @@ const featuredItems: Item[] = [
     image: "https://media.pri.org/s3fs-public/story/images/Mithai.JPG",
     note: "Six pieces · pure desi ghee · no preservatives",
     expiry: "made today",
-  },
-  {
-    id: 4,
-    kind: "supply",
-    title: "Rose kaju katli collection",
-    category: "Contemporary mithai",
-    available: 36,
-    requested: 8,
-    unit: "boxes",
-    price: 790,
-    place: "Dombivli East",
-    distance: "4.8 km",
-    seller: "Nakhye’s Ashok Sweets",
-    rating: "100% fulfilment",
-    image:
-      "https://weddingsutra.com/images/Vendor_Images/Wedding-Favors-%26-Gifts/kesar-sweets/kesar-sweets-07.jpg",
-    note: "Rose petal, classic and pistachio · 18 pieces",
-    expiry: "best before 7 days",
-  },
-  {
-    id: 5,
-    kind: "supply",
-    title: "Corporate Diwali hampers",
-    category: "Bulk gifting",
-    available: 30,
-    requested: 75,
-    unit: "hampers",
-    price: 1200,
-    place: "Dombivli",
-    distance: "6.2 km",
-    seller: "Nakhye’s Ashok Sweets",
-    rating: "Usually replies in 12 min",
-    image:
-      "https://cdn.shopify.com/s/files/1/0895/2489/6047/files/5_collections.webp?v=1756896780",
-    note: "Custom sleeve and message card required",
-    expiry: "needed by 30 Sep",
-    match: "Possible match",
+    sku: "AS-ML-003",
+    client_id: 3,
+    handle: "motichoor-laddoo-desi-ghee",
   },
 ];
 
@@ -286,45 +374,14 @@ const sweetImages = [
   "https://weddingsutra.com/images/Vendor_Images/Wedding-Favors-%26-Gifts/kesar-sweets/kesar-sweets-07.jpg",
   "https://static.wixstatic.com/media/57b89c_9a4a7311b25a41439084b657062603aa~mv2.jpg/v1/fill/w_980,h_1307,al_c,q_85/57b89c_9a4a7311b25a41439084b657062603aa~mv2.jpg",
 ];
-const items: Item[] = [
-  ...featuredItems,
-  ...sweetNames.slice(5).map((title, index) => ({
-    id: index + 6,
-    kind: "supply" as const,
-    title,
-    category:
-      index < 20
-        ? "Bihar heritage"
-        : index < 55
-          ? "Everyday favourites"
-          : index < 82
-            ? "Celebration sweets"
-            : "Premium gifting",
-    available: 12 + ((index * 7) % 76),
-    requested: 4 + ((index * 11) % 39),
-    unit: index % 4 === 0 ? "kg" : "boxes",
-    price: 240 + ((index * 65) % 760),
-    place: index % 2 ? "Dombivli East" : "Dombivli West",
-    distance: `${(0.8 + (index % 12) * 0.6).toFixed(1)} km`,
-    seller: "Nakhye’s Ashok Sweets",
-    rating:
-      index % 3 === 0 ? "Identity verified" : `${94 + (index % 6)}% fulfilment`,
-    image: sweetImages[index % sweetImages.length],
-    note:
-      index < 20
-        ? "Regional recipe · made in Bihar"
-        : "Fresh batch · vegetarian",
-    expiry: index % 3 === 0 ? "made today" : "best before 5 days",
-    match: undefined,
-  })),
-];
+const items: AppProduct[] = [...FALLBACK_ITEMS];
 
 function Balance({
   item,
   large = false,
   preview,
 }: {
-  item: Item;
+  item: AppProduct;
   large?: boolean;
   preview?: number;
 }) {
@@ -363,7 +420,7 @@ function Card({
   onSave,
   onAdd,
 }: {
-  item: Item;
+  item: AppProduct;
   onOpen: () => void;
   saved: boolean;
   onSave: () => void;
@@ -436,9 +493,9 @@ function App() {
   const [isAdmin, setIsAdmin] = useState(
     () => sessionStorage.getItem("ashok-admin-session") === "active",
   );
-  const [products, setProducts] = useState<Item[]>(items);
+  const [products, setProducts] = useState<AppProduct[]>(items);
   const [cart, setCart] = useState<CartLine[]>([]);
-  const [selected, setSelected] = useState(items[0]);
+  const [selected, setSelected] = useState<AppProduct>(items[0]);
   const [qty, setQty] = useState(12);
   const [saved, setSaved] = useState<number[]>([4]);
   const [toast, setToast] = useState("");
@@ -447,6 +504,32 @@ function App() {
   const [palette, setPalette] = useState(false);
   const [requested, setRequested] = useState(false);
   const [processing, setProcessing] = useState(false);
+  const [collections, setCollections] = useState<ClientCollection[]>([]);
+  const [loadingProducts, setLoadingProducts] = useState(false);
+
+  // --- Fetch products from client API on mount ---
+  useEffect(() => {
+    let cancelled = false;
+    setLoadingProducts(true);
+    Promise.all([fetchProductsFromClient(), fetchCollectionsFromClient()])
+      .then(([clientProducts, clientCollections]) => {
+        if (cancelled) return;
+        if (clientProducts.length > 0) {
+          setProducts(clientProducts);
+          setSelected(clientProducts[0]);
+        }
+        if (clientCollections.length > 0) {
+          setCollections(clientCollections);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingProducts(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   useEffect(() => {
     const savedCart = localStorage.getItem("ashok-cart");
     const savedProducts = localStorage.getItem("ashok-products");
@@ -519,7 +602,7 @@ function App() {
       ),
     [tab, query, products],
   );
-  const addCart = (item: Item, amount = 1) => {
+  const addCart = (item: AppProduct, amount = 1) => {
     setCart((current) => {
       const existing = current.find((line) => line.item.id === item.id);
       return existing
@@ -540,7 +623,7 @@ function App() {
     if (doc.startViewTransition) doc.startViewTransition(update);
     else update();
   };
-  const open = (i: Item) => {
+  const open = (i: AppProduct) => {
     transition(() => {
       setSelected(i);
       setQty(Math.min(12, i.available));
@@ -1127,7 +1210,7 @@ function Detail({
   buyNow,
   request,
 }: {
-  item: Item;
+  item: AppProduct;
   qty: number;
   setQty: (n: number) => void;
   saved: boolean;
@@ -1895,17 +1978,20 @@ function AdminPanel({
   setProducts,
   logout,
 }: {
-  products: Item[];
-  setProducts: React.Dispatch<React.SetStateAction<Item[]>>;
+  products: AppProduct[];
+  setProducts: React.Dispatch<React.SetStateAction<AppProduct[]>>;
   logout: () => void;
 }) {
   const [title, setTitle] = useState("");
   const [price, setPrice] = useState("");
   const [couponDiscount, setCouponDiscount] = useState("10");
   const [generated, setGenerated] = useState("");
+  const [syncStatus, setSyncStatus] = useState("");
+  const [syncing, setSyncing] = useState(false);
+
   const add = () => {
     if (!title || !price) return;
-    const newItem: Item = {
+    const newItem: AppProduct = {
       ...products[0],
       id: Date.now(),
       title,
@@ -1913,17 +1999,37 @@ function AdminPanel({
       category: "New product",
       available: 25,
       requested: 0,
-      image: sweetImages[0],
+      image: "https://static.wixstatic.com/media/57b89c_9a4a7311b25a41439084b657062603aa~mv2.jpg/v1/fill/w_980,h_1307,al_c,q_85/57b89c_9a4a7311b25a41439084b657062603aa~mv2.jpg",
       seller: "Nakhye’s Ashok Sweets",
       place: "Dombivli",
       distance: "In store",
       rating: "FSSAI licensed",
       note: "Freshly added from admin",
       expiry: "made today",
+      sku: `AS-${Date.now().toString(36).toUpperCase()}`,
     };
     setProducts((p) => [newItem, ...p]);
     setTitle("");
     setPrice("");
+  };
+
+  const syncFromClient = async () => {
+    setSyncing(true);
+    setSyncStatus("Fetching products from client API...");
+    try {
+      const clientProducts = await fetchProductsFromClient();
+      if (clientProducts.length > 0) {
+        setProducts(clientProducts);
+        setSyncStatus(`✓ Synced ${clientProducts.length} products`);
+      } else {
+        setSyncStatus("No products found");
+      }
+    } catch (error) {
+      setSyncStatus(`✗ Sync failed: ${(error as Error).message}`);
+    } finally {
+      setSyncing(false);
+      setTimeout(() => setSyncStatus(""), 4000);
+    }
   };
   const generate = () => {
     const code = `ASHOK${new Date().getFullYear().toString().slice(-2)}${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
@@ -2005,6 +2111,26 @@ function AdminPanel({
               <span>ACTIVE COUPON</span>
               <b>{generated}</b>
               <small>{couponDiscount}% off · stored for checkout</small>
+            </div>
+          )}
+        </section>
+        <section className="admin-card">
+          <h2>Client API sync</h2>
+          <p className="admin-card-note">
+            Pull products from the client API or refresh the local catalog.
+          </p>
+          <div className="admin-sync-actions">
+            <button
+              className="quantum-btn"
+              onClick={syncFromClient}
+              disabled={syncing}
+            >
+              <Store size={18} /> Refresh from client API
+            </button>
+          </div>
+          {syncStatus && (
+            <div className={"sync-status " + (syncStatus.startsWith("✓") ? "ok" : "err")}>
+              {syncStatus}
             </div>
           )}
         </section>
