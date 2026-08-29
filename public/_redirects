@@ -1,0 +1,7 @@
+# Netlify redirects for client API
+/api/client/products /.netlify/functions/products 200
+/api/client/collections /.netlify/functions/collections 200
+/api/client/collection-products /.netlify/functions/collection-products 200
+
+# SPA fallback - all non-file routes go to index.html
+/* /index.html 200
