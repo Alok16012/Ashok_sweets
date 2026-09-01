@@ -23,6 +23,9 @@ const PRODUCTS = [
         grams: 500,
         weight: 1.1,
         weight_unit: "lb",
+        image: {
+          src: "https://static.wixstatic.com/media/57b89c_9a4a7311b25a41439084b657062603aa~mv2.jpg/v1/fill/w_980,h_1307,al_c,q_85/57b89c_9a4a7311b25a41439084b657062603aa~mv2.jpg"
+        },
         option_values: { "Size": "500g" }
       }
     ],
@@ -49,6 +52,9 @@ const PRODUCTS = [
         grams: 450,
         weight: 1.0,
         weight_unit: "lb",
+        image: {
+          src: "https://weddingsutra.com/images/Vendor_Images/Wedding-Favors-%26-Gifts/meetha-by-radisson/meetha-by-radisson-03.jpg"
+        },
         option_values: { "Size": "9 pcs" }
       }
     ],
@@ -75,6 +81,9 @@ const PRODUCTS = [
         grams: 350,
         weight: 0.77,
         weight_unit: "lb",
+        image: {
+          src: "https://media.pri.org/s3fs-public/story/images/Mithai.JPG"
+        },
         option_values: { "Size": "6 pcs" }
       }
     ],
@@ -199,9 +208,10 @@ exports.handler = async (event) => {
       statusCode: 200,
       headers,
       body: JSON.stringify({
-        success: true,
-        count: paginated.length,
-        products: paginated
+        data: {
+          total: paginated.length,
+          products: paginated
+        }
       })
     };
   } catch (error) {

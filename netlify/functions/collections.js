@@ -60,9 +60,10 @@ exports.handler = async (event) => {
       statusCode: 200,
       headers,
       body: JSON.stringify({
-        success: true,
-        count: COLLECTIONS.length,
-        collections: COLLECTIONS
+        data: {
+          total: COLLECTIONS.length,
+          collections: COLLECTIONS
+        }
       })
     };
   } catch (error) {

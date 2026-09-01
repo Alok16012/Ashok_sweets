@@ -55,6 +55,9 @@ const ALL_PRODUCTS = [
         grams: 450,
         weight: 1.0,
         weight_unit: "lb",
+        image: {
+          src: "https://weddingsutra.com/images/Vendor_Images/Wedding-Favors-%26-Gifts/meetha-by-radisson/meetha-by-radisson-03.jpg"
+        },
         option_values: { "Size": "9 pcs" }
       }
     ],
@@ -179,39 +182,29 @@ exports.handler = async (event) => {
   }
 
   try {
-    const url = new URL(event.rawUrl || `https://dummy${event.path}`);
-    const handle = url.searchParams.get("handle") || "";
-    const collectionId = url.searchParams.get("collection_id");
-    const limit = parseInt(url.searchParams.get("limit") || "50", 10);
-    const page = parseInt(url.searchParams.get("page") || "1", 10);
+    // Path-based: /api/client/collection-products/{handle}
+    const pathParts = (event.path || "").split("/").filter(Boolean);
+    const handle = pathParts[pathParts.length - 1] || "";
 
     let productIds;
 
     if (handle && COLLECTIONS[handle]) {
       productIds = COLLECTIONS[handle];
-    } else if (collectionId) {
-      // Match by product_type if collection_id given
-      const collection = Object.values(COLLECTIONS).find(ids => ids.includes(parseInt(collectionId, 10)));
-      productIds = collection || [];
     } else {
-      // Return all if no filter
+      // Return all if no valid handle
       productIds = ALL_PRODUCTS.map(p => p.id);
     }
 
-    let filtered = ALL_PRODUCTS.filter(p => productIds.includes(p.id));
-
-    // Pagination
-    const start = (page - 1) * limit;
-    const paginated = filtered.slice(start, start + limit);
+    const filtered = ALL_PRODUCTS.filter(p => productIds.includes(p.id));
 
     return {
       statusCode: 200,
       headers,
       body: JSON.stringify({
-        success: true,
-        collection: handle || collectionId || "all",
-        count: paginated.length,
-        products: paginated
+        data: {
+          total: filtered.length,
+          products: filtered
+        }
       })
     };
   } catch (error) {

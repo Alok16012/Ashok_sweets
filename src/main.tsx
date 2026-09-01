@@ -64,6 +64,7 @@ type ClientVariant = {
   weight?: number;
   weight_unit?: string;
   option_values?: Record<string, string>;
+  image?: { src?: string };
 };
 
 type ClientProduct = {
@@ -113,9 +114,9 @@ type AppProduct = {
 };
 
 function mapClientToApp(product: ClientProduct): AppProduct {
-  const mainImage = product.image?.src || product.image_url || "";
-  const category = product.product_type || product.vendor || "Sweets";
   const variant = product.variants?.[0];
+  const mainImage = variant?.image?.src || product.image?.src || product.image_url || "";
+  const category = product.product_type || product.vendor || "Sweets";
   const stock = variant?.quantity ?? 0;
   const price = Number(variant?.price || 0);
 
@@ -149,8 +150,9 @@ async function fetchProductsFromClient(): Promise<AppProduct[]> {
   try {
     const res = await fetch("/api/client/products");
     const data = await res.json();
-    if (data.success && Array.isArray(data.products)) {
-      return data.products.map(mapClientToApp);
+    const products = data?.data?.products || data?.products || [];
+    if (Array.isArray(products)) {
+      return products.map(mapClientToApp);
     }
     return [];
   } catch {
@@ -160,12 +162,11 @@ async function fetchProductsFromClient(): Promise<AppProduct[]> {
 
 async function fetchProductsFromCollection(handleOrId: string): Promise<AppProduct[]> {
   try {
-    const url = new URL("/api/client/collection-products", window.location.origin);
-    url.searchParams.set("handle", handleOrId);
-    const res = await fetch(url.toString());
+    const res = await fetch(`/api/client/collection-products/${encodeURIComponent(handleOrId)}`);
     const data = await res.json();
-    if (data.success && Array.isArray(data.products)) {
-      return data.products.map(mapClientToApp);
+    const products = data?.data?.products || data?.products || [];
+    if (Array.isArray(products)) {
+      return products.map(mapClientToApp);
     }
     return [];
   } catch {
@@ -177,8 +178,9 @@ async function fetchCollectionsFromClient(): Promise<ClientCollection[]> {
   try {
     const res = await fetch("/api/client/collections");
     const data = await res.json();
-    if (data.success && Array.isArray(data.collections)) {
-      return data.collections;
+    const collections = data?.data?.collections || data?.collections || [];
+    if (Array.isArray(collections)) {
+      return collections;
     }
     return [];
   } catch {
