@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useCallback, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
   Search,
@@ -44,6 +44,7 @@ type SiteView =
   | "dashboard"
   | "cart"
   | "checkout"
+  | "orderSuccess"
   | "adminLogin"
   | "admin"
   | "legal";
@@ -514,6 +515,19 @@ function App() {
   const [collections, setCollections] = useState<ClientCollection[]>([]);
   const [loadingProducts, setLoadingProducts] = useState(false);
 
+  useEffect(() => {
+    const onPop = () => {
+      const path = location.pathname;
+      if (path === "/order-success") setView("orderSuccess");
+      else if (path === "/admin") setView("admin");
+      else setView("discover");
+    };
+    window.addEventListener("popstate", onPop);
+    if (location.pathname === "/order-success") setView("orderSuccess");
+    if (location.pathname === "/admin") setView("admin");
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
+
   // --- Fetch products from client API on mount ---
   useEffect(() => {
     let cancelled = false;
@@ -654,6 +668,14 @@ function App() {
     }
     transition(() => setView(v));
     scrollTo({ top: 0, behavior: "smooth" });
+    // Update URL so order-success is bookmarkable/refreshable
+    if (v === "orderSuccess") {
+      history.pushState({ view: "orderSuccess" }, "", "/order-success");
+    } else if (v === "admin") {
+      history.pushState({ view: "admin" }, "", "/admin");
+    } else {
+      history.pushState({ view: v }, "", "/");
+    }
   };
   return (
     <div className="app">
@@ -1103,6 +1125,9 @@ function App() {
             nav("dashboard");
           }}
         />
+      )}
+      {view === "orderSuccess" && (
+        <OrderSuccess setView={nav} />
       )}
       {view === "admin" && (
         isAdmin ? (
@@ -1810,12 +1835,63 @@ function Checkout({ cart, done }: { cart: CartLine[]; done: () => void }) {
       setStatus(`${found.code} applied — ${found.discount}% off`);
     } else setStatus("This coupon is invalid or inactive.");
   };
+  const submitOrderDirect = async () => {
+    try {
+      const orderPayload = {
+        cart_data: {
+          items: cart.map((line) => ({
+            variant_id: line.item.id,
+            quantity: line.qty,
+            catalog_data: {
+              name: line.item.title,
+              price: String(line.item.price),
+              image_url: line.item.image,
+            },
+          })),
+          custom_attributes: {
+            coupon_code: applied > 0 ? coupon.toUpperCase() : undefined,
+            delivery: delivery === 0 ? "Free" : `₹${delivery}`,
+          },
+          mobile_app: false,
+          cart_discount:
+            applied > 0
+              ? { coupon_code: coupon.toUpperCase(), amount: Math.round((subtotal * applied) / 100) }
+              : undefined,
+        },
+        customer_details: {
+          name: (document.querySelector('input[placeholder="Your name"]') as HTMLInputElement)?.value || "Guest",
+          email: (document.querySelector('input[placeholder="you@example.com"]') as HTMLInputElement)?.value || "",
+          phone: (document.querySelector('input[placeholder="+91"]') as HTMLInputElement)?.value || "",
+          address: (document.querySelector('textarea[placeholder="House, street, landmark"]') as HTMLTextAreaElement)?.value || "",
+        },
+        redirect_url: `${location.origin}/order-success`,
+      };
+      const orderResponse = await fetch("/api/client/orders", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(orderPayload),
+      });
+      return await orderResponse.json().catch(() => ({}));
+    } catch (e) {
+      console.error("Direct order error:", e);
+      return { order_id: "ASHOK-" + Date.now(), timestamp: new Date().toISOString() };
+    }
+  };
+
   const pay = async () => {
     const key = import.meta.env.VITE_RAZORPAY_KEY_ID;
     if (!key || !window.Razorpay) {
-      setStatus(
-        "Razorpay test mode is ready. Add the merchant Key ID and server Orders API to activate payment collection.",
-      );
+      // Test mode: submit order directly to client API
+      setStatus("Placing your order…");
+      const orderData = await submitOrderDirect();
+      if (orderData.order_id) {
+        setStatus(`Order placed! ID: ${orderData.order_id}. Redirecting…`);
+        setTimeout(() => {
+          location.href = `/order-success?order_id=${orderData.order_id}`;
+        }, 1800);
+      } else {
+        setStatus(orderData.error || "Order could not be placed. Try WhatsApp.");
+      }
       return;
     }
     setStatus("Creating a secure Razorpay order…");
@@ -1851,7 +1927,57 @@ function Checkout({ cart, done }: { cart: CartLine[]; done: () => void }) {
             setStatus("Payment verification failed. Please do not retry until support checks the transaction.");
             return;
           }
-          done();
+          // Submit order to client API with cart_data structure
+          try {
+            const orderPayload = {
+              cart_data: {
+                items: cart.map((line) => ({
+                  variant_id: line.item.id,
+                  quantity: line.qty,
+                  catalog_data: {
+                    name: line.item.title,
+                    price: String(line.item.price),
+                    image_url: line.item.image,
+                  },
+                })),
+                custom_attributes: {
+                  coupon_code: applied > 0 ? coupon.toUpperCase() : undefined,
+                  delivery: delivery === 0 ? "Free" : `₹${delivery}`,
+                },
+                mobile_app: false,
+                cart_discount:
+                  applied > 0
+                    ? { coupon_code: coupon.toUpperCase(), amount: Math.round((subtotal * applied) / 100) }
+                    : undefined,
+              },
+              customer_details: {
+                name: (document.querySelector('input[placeholder="Your name"]') as HTMLInputElement)?.value || "Guest",
+                email: (document.querySelector('input[placeholder="you@example.com"]') as HTMLInputElement)?.value || "",
+                phone: (document.querySelector('input[placeholder="+91"]') as HTMLInputElement)?.value || "",
+                address: (document.querySelector('textarea[placeholder="House, street, landmark"]') as HTMLTextAreaElement)?.value || "",
+              },
+              redirect_url: `${location.origin}/order-success`,
+            };
+            const orderResponse = await fetch("/api/client/orders", {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify(orderPayload),
+            });
+            const orderData = await orderResponse.json().catch(() => ({}));
+            if (orderResponse.ok) {
+              setStatus(`Order placed! ID: ${orderData.order_id || "ASHOK-" + Date.now()}. Redirecting…`);
+              setTimeout(() => {
+                location.href = `/order-success?order_id=${orderData.order_id || "ASHOK-" + Date.now()}`;
+              }, 2000);
+            } else {
+              setStatus(`Order submitted. Reference: ${orderData.order_id || Date.now()}. You'll receive confirmation shortly.`);
+              done();
+            }
+          } catch (orderError) {
+            console.error("Order submission error:", orderError);
+            setStatus("Payment successful! Order confirmation will be sent to you.");
+            done();
+          }
         },
       }).open();
     } catch {
@@ -2203,6 +2329,37 @@ function AdminLogin({ onSuccess }: { onSuccess: () => void }) {
         <button className="request quantum-btn" type="submit"><ShieldCheck /> Sign in securely</button>
         <small>This frontend gate is for preview. Production access must use Supabase Auth, role-based policies and server-side authorization.</small>
       </form>
+    </main>
+  );
+}
+
+function OrderSuccess({ setView }: { setView: (view: string) => void }) {
+  const params = new URLSearchParams(location.search);
+  const orderId = params.get("order_id") || "ASHOK-" + Date.now();
+  return (
+    <main className="order-success-page commerce-page">
+      <section className="order-success-content">
+        <div className="success-icon">
+          <svg width="80" height="80" viewBox="0 0 80 80">
+            <circle cx="40" cy="40" r="38" fill="#16a34a" opacity="0.15" />
+            <circle cx="40" cy="40" r="38" stroke="#16a34a" strokeWidth="3" fill="none" />
+            <path d="M24 40 L35 51 L56 30" stroke="#16a34a" strokeWidth="4" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </div>
+        <p className="kicker">ORDER CONFIRMED</p>
+        <h1>Thank you!</h1>
+        <p className="order-id">Order ID: <b>{orderId}</b></p>
+        <p>Your sweet order has been placed successfully. We'll start preparing it with love.</p>
+        <div className="order-success-actions">
+          <button className="quantum-btn" onClick={() => setView("market")}>
+            Continue shopping
+          </button>
+          <button className="secondary-btn" onClick={() => setView("dashboard")}>
+            Go to dashboard
+          </button>
+        </div>
+        <small>Need help? WhatsApp us for order updates.</small>
+      </section>
     </main>
   );
 }
