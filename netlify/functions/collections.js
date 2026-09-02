@@ -1,54 +1,15 @@
 // netlify/functions/collections.js
-// Returns collections in client API format
+// Fetches collections from the actual client API
 
-const COLLECTIONS = [
-  {
-    id: 1,
-    title: "Premium Mithai",
-    handle: "premium-mithai",
-    description: "Premium dryfruit and special occasion sweets",
-    image_url: "https://static.wixstatic.com/media/57b89c_9a4a7311b25a41439084b657062603aa~mv2.jpg/v1/fill/w_980,h_1307,al_c,q_85/57b89c_9a4a7311b25a41439084b657062603aa~mv2.jpg",
-    products_count: 2,
-    created_at: "2024-01-01T00:00:00+05:30",
-    updated_at: "2024-03-01T00:00:00+05:30"
-  },
-  {
-    id: 2,
-    title: "Traditional Favourites",
-    handle: "traditional-favourites",
-    description: "Classic Indian sweets made with traditional recipes",
-    image_url: "https://media.pri.org/s3fs-public/story/images/Mithai.JPG",
-    products_count: 2,
-    created_at: "2024-01-01T00:00:00+05:30",
-    updated_at: "2024-03-01T00:00:00+05:30"
-  },
-  {
-    id: 3,
-    title: "Wedding Orders",
-    handle: "wedding-orders",
-    description: "Custom wedding mithai boxes and hampers",
-    image_url: "https://weddingsutra.com/images/Vendor_Images/Wedding-Favors-%26-Gifts/meetha-by-radisson/meetha-by-radisson-03.jpg",
-    products_count: 1,
-    created_at: "2024-02-01T00:00:00+05:30",
-    updated_at: "2024-03-01T00:00:00+05:30"
-  },
-  {
-    id: 4,
-    title: "Bengali Sweets",
-    handle: "bengali-sweets",
-    description: "Authentic Bengali sweets from Dombivli",
-    image_url: "https://media.pri.org/s3fs-public/story/images/Mithai.JPG",
-    products_count: 1,
-    created_at: "2024-03-01T00:00:00+05:30",
-    updated_at: "2024-03-10T00:00:00+05:30"
-  }
-];
+const CLIENT_API_BASE = process.env.VITE_CLIENT_API_BASE_URL || "https://api.example.com/api/v1";
+const CLIENT_API_KEY = process.env.VITE_CLIENT_API_KEY || "";
 
 exports.handler = async (event) => {
   const headers = {
     "Content-Type": "application/json",
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Headers": "Content-Type",
+    "Access-Control-Allow-Methods": "GET, OPTIONS"
   };
 
   if (event.httpMethod === "OPTIONS") {
@@ -56,19 +17,38 @@ exports.handler = async (event) => {
   }
 
   try {
+    const url = `${CLIENT_API_BASE}/collections`;
+
+    const apiRes = await fetch(url, {
+      method: "GET",
+      headers: {
+        "Content-Type": "application/json",
+        "X-API-Key": CLIENT_API_KEY
+      }
+    });
+
+    if (!apiRes.ok) {
+      const errText = await apiRes.text();
+      throw new Error(`Client API responded ${apiRes.status}: ${errText}`);
+    }
+
+    const data = await apiRes.json();
+    const collections = data?.data?.collections || data?.collections || [];
+
     return {
       statusCode: 200,
       headers,
       body: JSON.stringify({
         data: {
-          total: COLLECTIONS.length,
-          collections: COLLECTIONS
+          total: data?.data?.total || collections.length,
+          collections
         }
       })
     };
   } catch (error) {
+    console.error("[collections] error:", error);
     return {
-      statusCode: 500,
+      statusCode: 502,
       headers,
       body: JSON.stringify({ success: false, error: error.message })
     };

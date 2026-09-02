@@ -110,6 +110,7 @@ type AppProduct = {
   match?: string;
   sku?: string;
   client_id?: number;
+  variant_id?: number;
   handle?: string;
 };
 
@@ -142,6 +143,7 @@ function mapClientToApp(product: ClientProduct): AppProduct {
     expiry: product.status === "active" ? "available now" : "out of stock",
     sku: variant?.sku,
     client_id: product.id,
+    variant_id: variant?.id,
     handle: product.handle,
   };
 }
@@ -208,6 +210,7 @@ const FALLBACK_ITEMS: AppProduct[] = [
     expiry: "best before 4 days",
     sku: "AS-KP-001",
     client_id: 1,
+    variant_id: 101,
     handle: "kesar-pista-festive-box",
   },
   {
@@ -230,6 +233,7 @@ const FALLBACK_ITEMS: AppProduct[] = [
     match: "Strong match",
     sku: "AS-WM-002",
     client_id: 2,
+    variant_id: 201,
     handle: "wedding-favour-mithai-boxes",
   },
   {
@@ -250,6 +254,7 @@ const FALLBACK_ITEMS: AppProduct[] = [
     expiry: "made today",
     sku: "AS-ML-003",
     client_id: 3,
+    variant_id: 301,
     handle: "motichoor-laddoo-desi-ghee",
   },
 ];
