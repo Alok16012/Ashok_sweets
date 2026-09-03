@@ -6,14 +6,22 @@
     <meta name="theme-color" content="#b80819" />
     <meta name="description" content="Shop fresh Indian sweets, celebration boxes and gifts from Nakhye's Ashok Sweets, Dombivli." />
     <title>Nakhye's Ashok Sweets · Dombivli</title>
+    <link
+      rel="stylesheet"
+      href="https://checkout-ui.shiprocket.com/assets/styles/shopify.css"
+    />
     <script>
-      // Only expose Razorpay config if a real key exists.
-      // Vite replaces import.meta.env at build time; use a flag instead of optional chaining here.
       window.__APP_FLAGS__ = window.__APP_FLAGS__ || {};
     </script>
   </head>
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
+    <!--
+      Shiprocket Checkout SDK. Defines window.HeadlessCheckout, which the
+      checkout page calls with a server-signed token. Loaded last so it never
+      blocks the app from rendering; the checkout button waits for it.
+    -->
+    <script src="https://checkout-ui.shiprocket.com/assets/js/channels/shopify.js"></script>
   </body>
 </html>

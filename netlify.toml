@@ -18,8 +18,13 @@
   status = 200
 
 [[redirects]]
-  from = "/api/client/orders"
-  to = "/.netlify/functions/orders"
+  from = "/api/checkout/token"
+  to = "/.netlify/functions/checkout-token"
+  status = 200
+
+[[redirects]]
+  from = "/api/checkout/status"
+  to = "/.netlify/functions/checkout-status"
   status = 200
 
 [[redirects]]

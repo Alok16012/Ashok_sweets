@@ -21,4 +21,4 @@ Ashok red is the action and identity colour; silver-mineral neutrals create rest
 
 ## Production architecture
 
-Vite/React/TypeScript frontend on Vercel; Supabase Postgres/Auth/Storage with RLS; Razorpay Orders API and signature verification in serverless functions. Inventory reservation must be executed in a trusted database function or server transaction, never by updating a browser-visible number.
+Vite/React/TypeScript frontend on Vercel; Supabase Postgres/Auth/Storage with RLS; Shiprocket Checkout for payment and delivery capture, with HMAC-signed token creation in serverless functions. Inventory reservation must be executed in a trusted database function or server transaction, never by updating a browser-visible number.

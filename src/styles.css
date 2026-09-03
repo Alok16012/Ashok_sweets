@@ -3179,27 +3179,33 @@ header {
   min-height: 100px;
   resize: vertical;
 }
-.razorpay-box {
+.secure-checkout-box {
   display: flex;
   align-items: center;
   gap: 15px;
-  border: 1px solid #4d5ee4;
-  background: #f7f8ff;
+  border: 1px solid var(--ashok-red);
+  background: #fff7f7;
   padding: 17px;
 }
-.razor-mark {
-  width: 43px;
-  height: 43px;
-  background: #2f4ad0;
-  color: #fff;
-  display: grid;
-  place-items: center;
-  font-weight: 700;
+.secure-checkout-box > svg {
+  width: 26px;
+  height: 26px;
+  color: var(--ashok-red);
+  flex: none;
 }
-.razorpay-box span {
+.secure-checkout-box span {
   display: flex;
   flex-direction: column;
   flex: 1;
+}
+.checkout-steps {
+  margin: 0 0 20px;
+  padding-left: 20px;
+  color: var(--muted);
+  line-height: 1.6;
+}
+.checkout-steps li + li {
+  margin-top: 6px;
 }
 .checkout-line {
   display: grid;

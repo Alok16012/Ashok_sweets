@@ -1,5 +1,6 @@
-import { defineConfig } from "vite";
+import { defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react";
+import crypto from "node:crypto";
 
 const FALLBACK_PRODUCTS = [
   {
@@ -119,7 +120,55 @@ const FALLBACK_COLLECTIONS = [
   }
 ];
 
-function apiPlugin() {
+type DevEnv = Record<string, string>;
+
+// Mirrors netlify/functions/_shiprocket-checkout.js so `npm run dev` exercises
+// the same signing and the same error paths as production. Credentials are read
+// from .env.local (or the shell); without them the dev route reports that
+// plainly instead of pretending checkout works.
+async function shiprocketCheckout(env: DevEnv, path: string, payload: unknown) {
+  const key = env.SHIPROCKET_CHECKOUT_API_KEY || "";
+  const secret = env.SHIPROCKET_CHECKOUT_API_SECRET || "";
+  const base =
+    env.SHIPROCKET_CHECKOUT_BASE_URL || "https://checkout-api.shiprocket.com";
+
+  if (!key || !secret) {
+    return { ok: false, status: 500, data: null as unknown };
+  }
+
+  const body = JSON.stringify(payload);
+  const signature = crypto
+    .createHmac("sha256", secret)
+    .update(body, "utf8")
+    .digest("base64");
+
+  const response = await fetch(base + path, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Api-Key": key,
+      "X-Api-HMAC-SHA256": signature,
+    },
+    body,
+  });
+
+  const text = await response.text();
+  let data: unknown = null;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    data = { raw: text };
+  }
+  return { ok: response.ok, status: response.status, data };
+}
+
+async function readJsonBody(req: { [Symbol.asyncIterator]?: unknown }) {
+  const chunks: Buffer[] = [];
+  for await (const chunk of req as AsyncIterable<Buffer>) chunks.push(chunk);
+  return JSON.parse(Buffer.concat(chunks).toString() || "{}");
+}
+
+function apiPlugin(env: DevEnv) {
   return {
     name: "api-routes",
     configureServer(server) {
@@ -127,7 +176,10 @@ function apiPlugin() {
         const u = new URL(req.url || "", `http://${req.headers.host}`);
         const pathname = u.pathname;
 
-        if (!pathname.startsWith("/api/client/")) {
+        if (
+          !pathname.startsWith("/api/client/") &&
+          !pathname.startsWith("/api/checkout/")
+        ) {
           return next();
         }
 
@@ -181,15 +233,84 @@ function apiPlugin() {
             return;
           }
 
-          if (pathname === "/api/client/orders" && req.method === "POST") {
-            const chunks: Buffer[] = [];
-            for await (const chunk of req) {
-              chunks.push(chunk);
+          if (pathname === "/api/checkout/token" && req.method === "POST") {
+            const body = await readJsonBody(req);
+            const items = Array.isArray(body.items) ? body.items : [];
+
+            if (items.length === 0) {
+              res.statusCode = 400;
+              res.end(JSON.stringify({ success: false, error: "Your cart is empty." }));
+              return;
             }
-            const body = JSON.parse(Buffer.concat(chunks).toString() || "{}");
-            const orderId = "65a" + Math.random().toString(36).slice(2, 18);
+
+            const result = await shiprocketCheckout(env, "/api/v1/access-token/checkout", {
+              cart_data: {
+                items: items.map((item: { variant_id: unknown; quantity: number }) => ({
+                  variant_id: String(item.variant_id),
+                  quantity: item.quantity,
+                })),
+                mobile_app: false,
+              },
+              redirect_url: body.redirect_url,
+              timestamp: new Date().toISOString(),
+            });
+
+            const inner = (result.data as { result?: { token?: string; expires_at?: string; data?: { order_id?: string } } } | null)?.result;
+
+            if (!result.ok || !inner?.token) {
+              console.error("[dev api] checkout token failed:", result.status, JSON.stringify(result.data));
+              res.statusCode = 502;
+              res.end(JSON.stringify({
+                success: false,
+                error: "Checkout could not be started. Set SHIPROCKET_CHECKOUT_API_KEY and SHIPROCKET_CHECKOUT_API_SECRET, then check the dev server log.",
+              }));
+              return;
+            }
+
             res.statusCode = 200;
-            res.end(JSON.stringify({ success: true, order_id: orderId, timestamp: new Date().toISOString(), redirect_url: body?.cart_data?.custom_attributes?.redirect_url || "http://localhost:3004/order-success" }));
+            res.end(JSON.stringify({
+              success: true,
+              token: inner.token,
+              order_id: inner.data?.order_id,
+              expires_at: inner.expires_at,
+            }));
+            return;
+          }
+
+          if (pathname === "/api/checkout/status" && req.method === "POST") {
+            const body = await readJsonBody(req);
+            const result = await shiprocketCheckout(env, "/api/v1/custom-platform-order/details", {
+              order_id: String(body.order_id || ""),
+              timestamp: new Date().toISOString(),
+            });
+
+            const order = (result.data as { result?: Record<string, unknown> } | null)?.result;
+
+            if (!result.ok || !order) {
+              console.error("[dev api] order status failed:", result.status, JSON.stringify(result.data));
+              res.statusCode = 502;
+              res.end(JSON.stringify({ success: false, error: "Could not look up this order." }));
+              return;
+            }
+
+            // Same subset as netlify/functions/checkout-status.js — the full
+            // response carries the shopper's address and phone, and dev must
+            // not expose fields production withholds.
+            res.statusCode = 200;
+            res.end(JSON.stringify({
+              success: true,
+              order: {
+                order_id: order.order_id,
+                status: order.status,
+                payment_type: order.payment_type,
+                payment_status: order.payment_status,
+                total_amount_payable: order.total_amount_payable,
+                coupon_codes: order.coupon_codes,
+                coupon_discount: order.coupon_discount,
+                edd: order.edd,
+                order_created_date: order.order_created_date,
+              },
+            }));
             return;
           }
 
@@ -205,6 +326,10 @@ function apiPlugin() {
   };
 }
 
-export default defineConfig({
-  plugins: [react(), apiPlugin()],
+export default defineConfig(({ mode }) => {
+  // "" as the prefix loads every variable, not just VITE_ ones — the
+  // Shiprocket credentials are deliberately unprefixed so they stay out of
+  // the browser bundle.
+  const env = loadEnv(mode, process.cwd(), "");
+  return { plugins: [react(), apiPlugin(env)] };
 });

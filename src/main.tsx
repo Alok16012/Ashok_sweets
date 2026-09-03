@@ -50,7 +50,14 @@ type SiteView =
   | "legal";
 declare global {
   interface Window {
-    Razorpay?: new (options: Record<string, unknown>) => { open: () => void };
+    // Defined by the Shiprocket Checkout SDK loaded in index.html.
+    HeadlessCheckout?: {
+      addToCart: (
+        event: unknown,
+        token: string,
+        options: { fallbackUrl: string; isInitiatedFromApp?: boolean },
+      ) => void;
+    };
   }
 }
 // --- Client API integration ---
@@ -1117,17 +1124,9 @@ function App() {
           shop={() => nav("market")}
         />
       )}
-      {view === "checkout" && (
-        <Checkout
-          cart={cart}
-          done={() => {
-            setCart([]);
-            nav("dashboard");
-          }}
-        />
-      )}
+      {view === "checkout" && <Checkout cart={cart} />}
       {view === "orderSuccess" && (
-        <OrderSuccess setView={nav} />
+        <OrderSuccess setView={nav} clearCart={() => setCart([])} />
       )}
       {view === "admin" && (
         isAdmin ? (
@@ -1373,7 +1372,7 @@ function Detail({
               )}
             </button>
             <p className="safe">
-              <ShieldCheck /> Secure billing. Razorpay checkout is used for
+              <ShieldCheck /> Secure billing. Shiprocket Checkout is used for
               online payments.
             </p>
           </div>
@@ -1797,7 +1796,7 @@ function CartPage({
               Proceed to billing <ArrowUpRight />
             </button>
             <small>
-              <ShieldCheck /> Secure payment through Razorpay
+              <ShieldCheck /> Secure payment through Shiprocket Checkout
             </small>
           </aside>
         </div>
@@ -1806,272 +1805,103 @@ function CartPage({
   );
 }
 
-function Checkout({ cart, done }: { cart: CartLine[]; done: () => void }) {
-  const [coupon, setCoupon] = useState("");
-  const [applied, setApplied] = useState(0);
+function Checkout({ cart }: { cart: CartLine[] }) {
   const [status, setStatus] = useState("");
+  const [busy, setBusy] = useState(false);
   const subtotal = cart.reduce((s, l) => s + l.item.price * l.qty, 0);
-  const delivery = subtotal >= 1499 ? 0 : 99;
-  const total = Math.max(
-    0,
-    subtotal + delivery - Math.round((subtotal * applied) / 100),
-  );
-  const applyCoupon = () => {
-    const saved = JSON.parse(localStorage.getItem("ashok-coupons") || "[]") as {
-      code: string;
-      discount: number;
-      active: boolean;
-    }[];
-    const known = [
-      { code: "ASHOK10", discount: 10, active: true },
-      { code: "FESTIVE15", discount: 15, active: true },
-      ...saved,
-    ];
-    const found = known.find(
-      (x) => x.code === coupon.trim().toUpperCase() && x.active,
-    );
-    if (found) {
-      setApplied(found.discount);
-      setStatus(`${found.code} applied — ${found.discount}% off`);
-    } else setStatus("This coupon is invalid or inactive.");
-  };
-  const submitOrderDirect = async () => {
-    try {
-      const orderPayload = {
-        cart_data: {
-          items: cart.map((line) => ({
-            variant_id: line.item.id,
-            quantity: line.qty,
-            catalog_data: {
-              name: line.item.title,
-              price: String(line.item.price),
-              image_url: line.item.image,
-            },
-          })),
-          custom_attributes: {
-            coupon_code: applied > 0 ? coupon.toUpperCase() : undefined,
-            delivery: delivery === 0 ? "Free" : `₹${delivery}`,
-          },
-          mobile_app: false,
-          cart_discount:
-            applied > 0
-              ? { coupon_code: coupon.toUpperCase(), amount: Math.round((subtotal * applied) / 100) }
-              : undefined,
-        },
-        customer_details: {
-          name: (document.querySelector('input[placeholder="Your name"]') as HTMLInputElement)?.value || "Guest",
-          email: (document.querySelector('input[placeholder="you@example.com"]') as HTMLInputElement)?.value || "",
-          phone: (document.querySelector('input[placeholder="+91"]') as HTMLInputElement)?.value || "",
-          address: (document.querySelector('textarea[placeholder="House, street, landmark"]') as HTMLTextAreaElement)?.value || "",
-        },
-        redirect_url: `${location.origin}/order-success`,
-      };
-      const orderResponse = await fetch("/api/client/orders", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(orderPayload),
-      });
-      const orderData = await orderResponse.json().catch(() => ({}));
-      return {
-        order_id: orderData.order_id || "ASHOK-" + Date.now(),
-        status: "created",
-        timestamp: new Date().toISOString(),
-      };
-    } catch (e) {
-      console.error("Direct order error:", e);
-      return { order_id: "ASHOK-" + Date.now(), timestamp: new Date().toISOString() };
-    }
-  };
 
-  const loadRazorpay = (key: string): Promise<boolean> =>
-    new Promise((resolve) => {
-      if (window.Razorpay) {
-        resolve(true);
-        return;
-      }
-      if (document.getElementById("razorpay-script")) {
-        const poll = setInterval(() => {
-          if (window.Razorpay) {
-            clearInterval(poll);
-            resolve(true);
-          }
-        }, 50);
-        setTimeout(() => { clearInterval(poll); resolve(false); }, 5000);
-        return;
-      }
-      const s = document.createElement("script");
-      s.src = "https://checkout.razorpay.com/v1/checkout.js";
-      s.defer = true;
-      s.id = "razorpay-script";
-      s.onload = () => resolve(true);
-      s.onerror = () => resolve(false);
-      document.head.appendChild(s);
-    });
+  // Shiprocket resolves each line against the variant id it synced from the
+  // catalogue. A line without one would build a cart their checkout cannot
+  // read, which surfaces as an unexplained failure after the shopper has
+  // already left our site — so it is caught here instead.
+  const unmapped = cart.filter((line) => !line.item.variant_id);
 
-  const pay = async () => {
-    const key = import.meta.env.VITE_RAZORPAY_KEY_ID;
-    if (!key || key === "rzp_test_replace_me") {
-      setStatus("Placing your order…");
-      const orderData = await submitOrderDirect();
-      if (orderData.order_id) {
-        setStatus(`Order placed! ID: ${orderData.order_id}. Redirecting…`);
-        setTimeout(() => {
-          location.href = `/order-success?order_id=${orderData.order_id}`;
-        }, 1800);
-      } else {
-        setStatus((orderData as Record<string, string>).error || "Order could not be placed. Try WhatsApp.");
-      }
+  const pay = async (event: React.MouseEvent<HTMLButtonElement>) => {
+    if (!cart.length || busy) return;
+
+    if (unmapped.length) {
+      setStatus(
+        `${unmapped
+          .map((line) => line.item.title)
+          .join(", ")} cannot be checked out online yet. Please order these on WhatsApp.`,
+      );
       return;
     }
-    const ready = await loadRazorpay(key);
-    if (!ready) {
-      setStatus("Payment gateway is unavailable. Placing order directly…");
-      const orderData = await submitOrderDirect();
-      if (orderData.order_id) {
-        setStatus(`Order placed! ID: ${orderData.order_id}. Redirecting…`);
-        setTimeout(() => {
-          location.href = `/order-success?order_id=${orderData.order_id}`;
-        }, 1800);
-      }
+
+    if (!window.HeadlessCheckout) {
+      setStatus(
+        "Secure checkout is still loading. Please try again in a moment.",
+      );
       return;
     }
-    setStatus("Creating a secure Razorpay order…");
+
+    setBusy(true);
+    setStatus("Opening secure checkout…");
+
     try {
-      const response = await fetch("/api/razorpay/order", {
+      const response = await fetch("/api/checkout/token", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          amount: total * 100,
-          currency: "INR",
-          receipt: `ashok-${Date.now()}`,
+          items: cart.map((line) => ({
+            variant_id: line.item.variant_id,
+            quantity: line.qty,
+          })),
+          redirect_url: `${location.origin}/order-success`,
         }),
       });
-      if (!response.ok) throw new Error("Order service unavailable");
-      const order = await response.json();
-      new window.Razorpay!({
-        key,
-        amount: total * 100,
-        currency: "INR",
-        name: "Nakhye’s Ashok Sweets",
-        description: "Sweet order",
-        image: `${location.origin}/brand/ashok-sweets-mark.jpg`,
-        order_id: order.id,
-        theme: { color: "#b80819" },
-        handler: async (payment: Record<string, string>) => {
-          setStatus("Payment received. Verifying your order…");
-          const verification = await fetch("/api/razorpay/verify", {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify(payment),
-          });
-          if (!verification.ok) {
-            setStatus("Payment verification failed. Please do not retry until support checks the transaction.");
-            return;
-          }
-          // Submit order to client API with cart_data structure
-          try {
-            const orderPayload = {
-              cart_data: {
-                items: cart.map((line) => ({
-                  variant_id: line.item.id,
-                  quantity: line.qty,
-                  catalog_data: {
-                    name: line.item.title,
-                    price: String(line.item.price),
-                    image_url: line.item.image,
-                  },
-                })),
-                custom_attributes: {
-                  coupon_code: applied > 0 ? coupon.toUpperCase() : undefined,
-                  delivery: delivery === 0 ? "Free" : `₹${delivery}`,
-                },
-                mobile_app: false,
-                cart_discount:
-                  applied > 0
-                    ? { coupon_code: coupon.toUpperCase(), amount: Math.round((subtotal * applied) / 100) }
-                    : undefined,
-              },
-              customer_details: {
-                name: (document.querySelector('input[placeholder="Your name"]') as HTMLInputElement)?.value || "Guest",
-                email: (document.querySelector('input[placeholder="you@example.com"]') as HTMLInputElement)?.value || "",
-                phone: (document.querySelector('input[placeholder="+91"]') as HTMLInputElement)?.value || "",
-                address: (document.querySelector('textarea[placeholder="House, street, landmark"]') as HTMLTextAreaElement)?.value || "",
-              },
-              redirect_url: `${location.origin}/order-success`,
-            };
-            const orderResponse = await fetch("/api/client/orders", {
-              method: "POST",
-              headers: { "content-type": "application/json" },
-              body: JSON.stringify(orderPayload),
-            });
-            const orderData = await orderResponse.json().catch(() => ({}));
-            if (orderResponse.ok) {
-              setStatus(`Order placed! ID: ${orderData.order_id || "ASHOK-" + Date.now()}. Redirecting…`);
-              setTimeout(() => {
-                location.href = `/order-success?order_id=${orderData.order_id || "ASHOK-" + Date.now()}`;
-              }, 2000);
-            } else {
-              setStatus(`Order submitted. Reference: ${orderData.order_id || Date.now()}. You'll receive confirmation shortly.`);
-              done();
-            }
-          } catch (orderError) {
-            console.error("Order submission error:", orderError);
-            setStatus("Payment successful! Order confirmation will be sent to you.");
-            done();
-          }
-        },
-      }).open();
-    } catch {
+
+      const data = await response.json().catch(() => null);
+
+      if (!response.ok || !data?.success || !data.token) {
+        setStatus(
+          data?.error || "Checkout could not be started. Please try again.",
+        );
+        setBusy(false);
+        return;
+      }
+
+      // Hands control to Shiprocket, which collects the delivery address,
+      // coupon code and payment. On success it returns the shopper to
+      // /order-success with oid and ost query parameters.
+      window.HeadlessCheckout.addToCart(event, data.token, {
+        fallbackUrl: location.href,
+        isInitiatedFromApp: false,
+      });
+    } catch (error) {
+      console.error("[checkout] could not start Shiprocket checkout:", error);
       setStatus(
-        "Payment could not start. Please retry or order through WhatsApp.",
+        "Checkout could not be started. Please retry or order through WhatsApp.",
       );
+      setBusy(false);
     }
   };
+
   return (
     <main className="checkout-page commerce-page">
       <div className="commerce-heading">
         <p className="kicker">SECURE CHECKOUT</p>
         <h1>
-          Billing & <em>payment.</em>
+          Review your <em>order.</em>
         </h1>
       </div>
       <div className="checkout-grid">
         <section className="billing-form">
-          <h2>Delivery details</h2>
-          <div className="form-grid">
-            <label>
-              Full name
-              <input placeholder="Your name" />
-            </label>
-            <label>
-              Mobile number
-              <input inputMode="tel" placeholder="+91" />
-            </label>
-            <label className="wide">
-              Email
-              <input type="email" placeholder="you@example.com" />
-            </label>
-            <label className="wide">
-              Delivery address
-              <textarea placeholder="House, street, landmark" />
-            </label>
-            <label>
-              City
-              <input defaultValue="Dombivli" />
-            </label>
-            <label>
-              PIN code
-              <input inputMode="numeric" placeholder="421202" />
-            </label>
-          </div>
-          <h2>Payment</h2>
-          <div className="razorpay-box">
-            <div className="razor-mark">R</div>
-            <span>
-              <b>Razorpay Secure</b>
-              <small>UPI · Cards · Netbanking · Wallets</small>
-            </span>
+          <h2>How checkout works</h2>
+          <ol className="checkout-steps">
+            <li>Check the items and quantities listed here.</li>
+            <li>
+              Continue to the secure checkout, where you enter your delivery
+              address and any coupon code.
+            </li>
+            <li>Pay by UPI, card, netbanking, wallet or cash on delivery.</li>
+          </ol>
+          <div className="secure-checkout-box">
             <ShieldCheck />
+            <span>
+              <b>Shiprocket Secure Checkout</b>
+              <small>UPI · Cards · Netbanking · Wallets · COD</small>
+            </span>
           </div>
         </section>
         <aside className="checkout-summary">
@@ -2088,58 +1918,34 @@ function Checkout({ cart, done }: { cart: CartLine[]; done: () => void }) {
               <b>₹{(line.qty * line.item.price).toLocaleString()}</b>
             </div>
           ))}
-          <div className="coupon-entry">
-            <TicketPercent />
-            <input
-              value={coupon}
-              onChange={(e) => setCoupon(e.target.value)}
-              placeholder="Coupon code"
-            />
-            <button onClick={applyCoupon}>Apply</button>
-          </div>
-          {status && (
-            <p
-              className={
-                status.includes("invalid")
-                  ? "checkout-error"
-                  : "checkout-status"
-              }
-            >
-              {status}
-            </p>
-          )}
           <dl>
             <div>
               <dt>Subtotal</dt>
               <dd>₹{subtotal.toLocaleString()}</dd>
             </div>
-            {applied > 0 && (
-              <div className="discount">
-                <dt>Coupon ({applied}%)</dt>
-                <dd>
-                  −₹{Math.round((subtotal * applied) / 100).toLocaleString()}
-                </dd>
-              </div>
-            )}
             <div>
-              <dt>Delivery</dt>
-              <dd>{delivery ? `₹${delivery}` : "Free"}</dd>
+              <dt>Delivery &amp; coupons</dt>
+              <dd>Applied at checkout</dd>
             </div>
           </dl>
-          <div className="summary-total">
-            <span>Payable</span>
-            <b>₹{total.toLocaleString()}</b>
-          </div>
+          {status && (
+            <p className={busy ? "checkout-status" : "checkout-error"}>
+              {status}
+            </p>
+          )}
           <button
-            disabled={!cart.length}
+            disabled={!cart.length || busy}
             className="request quantum-btn"
             onClick={pay}
           >
-            <CreditCard /> Pay securely ₹{total.toLocaleString()}
+            <CreditCard />
+            {busy
+              ? "Opening secure checkout…"
+              : `Checkout · ₹${subtotal.toLocaleString()}`}
           </button>
           <small>
-            Test-mode payment preview. Live collection requires server-side
-            Razorpay order creation and credentials.
+            Delivery charges, coupon codes and the final payable amount are
+            confirmed on the secure checkout screen.
           </small>
         </aside>
       </div>
@@ -2374,9 +2180,120 @@ function AdminLogin({ onSuccess }: { onSuccess: () => void }) {
   );
 }
 
-function OrderSuccess({ setView }: { setView: (view: SiteView) => void }) {
+type ShiprocketOrder = {
+  order_id?: string;
+  status?: string;
+  payment_type?: string;
+  payment_status?: string;
+  total_amount_payable?: number;
+  coupon_codes?: string[] | string | null;
+  edd?: string | null;
+};
+
+function OrderSuccess({
+  setView,
+  clearCart,
+}: {
+  setView: (view: SiteView) => void;
+  clearCart: () => void;
+}) {
+  // Shiprocket appends its own order id (oid) and outcome (ost) on redirect.
   const params = new URLSearchParams(location.search);
-  const orderId = params.get("order_id") || "ASHOK-" + Date.now();
+  const orderId = params.get("oid");
+  const redirectSaidSuccess = (params.get("ost") || "").toUpperCase() === "SUCCESS";
+
+  const [order, setOrder] = useState<ShiprocketOrder | null>(null);
+  const [state, setState] = useState<
+    "loading" | "confirmed" | "failed" | "unknown"
+  >(orderId ? "loading" : "unknown");
+
+  // The redirect parameters come from the URL bar and can be edited or replayed,
+  // so the confirmation is only shown once Shiprocket's own record agrees.
+  useEffect(() => {
+    if (!orderId) return;
+    let active = true;
+
+    (async () => {
+      try {
+        const response = await fetch("/api/checkout/status", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ order_id: orderId }),
+        });
+        const data = await response.json().catch(() => null);
+        if (!active) return;
+
+        if (response.ok && data?.success && data.order) {
+          setOrder(data.order);
+          setState(data.order.status === "SUCCESS" ? "confirmed" : "failed");
+        } else {
+          setState(redirectSaidSuccess ? "confirmed" : "failed");
+        }
+      } catch {
+        if (active) setState(redirectSaidSuccess ? "confirmed" : "failed");
+      }
+    })();
+
+    return () => {
+      active = false;
+    };
+  }, [orderId, redirectSaidSuccess]);
+
+  // Clear the basket only once, and only for an order that actually went through.
+  const cartCleared = React.useRef(false);
+  useEffect(() => {
+    if (state === "confirmed" && !cartCleared.current) {
+      cartCleared.current = true;
+      clearCart();
+    }
+  }, [state, clearCart]);
+
+  if (state === "loading") {
+    return (
+      <main className="order-success-page commerce-page">
+        <section className="order-success-content">
+          <p className="kicker">PLEASE WAIT</p>
+          <h1>Checking your order…</h1>
+          <p>We're confirming your payment with the checkout provider.</p>
+        </section>
+      </main>
+    );
+  }
+
+  if (state !== "confirmed") {
+    return (
+      <main className="order-success-page commerce-page">
+        <section className="order-success-content">
+          <p className="kicker">ORDER NOT CONFIRMED</p>
+          <h1>Payment not completed</h1>
+          <p>
+            {orderId
+              ? "We could not confirm this order. If money has left your account it will be returned automatically — please contact us before paying again."
+              : "We don't have any order details for this page."}
+          </p>
+          {orderId && (
+            <p className="order-id">
+              Reference: <b>{orderId}</b>
+            </p>
+          )}
+          <div className="order-success-actions">
+            <button className="quantum-btn" onClick={() => setView("cart")}>
+              Back to cart
+            </button>
+            <button className="secondary-btn" onClick={() => setView("market")}>
+              Continue shopping
+            </button>
+          </div>
+          <small>Need help? WhatsApp us and we'll sort it out.</small>
+        </section>
+      </main>
+    );
+  }
+
+  const coupons = Array.isArray(order?.coupon_codes)
+    ? order?.coupon_codes.join(", ")
+    : order?.coupon_codes || "";
+
   return (
     <main className="order-success-page commerce-page">
       <section className="order-success-content">
@@ -2389,8 +2306,23 @@ function OrderSuccess({ setView }: { setView: (view: SiteView) => void }) {
         </div>
         <p className="kicker">ORDER CONFIRMED</p>
         <h1>Thank you!</h1>
-        <p className="order-id">Order ID: <b>{orderId}</b></p>
-        <p>Your sweet order has been placed successfully. We'll start preparing it with love.</p>
+        <p className="order-id">
+          Order ID: <b>{order?.order_id || orderId}</b>
+        </p>
+        {typeof order?.total_amount_payable === "number" && (
+          <p>
+            Paid ₹{order.total_amount_payable.toLocaleString()}
+            {order.payment_type === "CASH_ON_DELIVERY"
+              ? " (cash on delivery)"
+              : ""}
+            {coupons ? ` · coupon ${coupons}` : ""}
+          </p>
+        )}
+        <p>
+          Your sweet order has been placed successfully. We'll start preparing it
+          with love.
+        </p>
+        {order?.edd && <p>Expected delivery: {order.edd}</p>}
         <div className="order-success-actions">
           <button className="quantum-btn" onClick={() => setView("market")}>
             Continue shopping
@@ -2434,7 +2366,7 @@ function LegalPage() {
             <h2>How we use your information</h2>
             <p>We may collect identity and contact details, delivery address, order history, customer-support messages, coupon use, device and usage data, and payment status. Card, UPI or net-banking credentials are entered into the payment provider’s secure interface; we should not store full card or UPI authentication credentials.</p>
             <h3>Purposes</h3><p>We use information to create and fulfil orders, collect or reconcile payment, deliver products, issue invoices, prevent fraud, answer requests, manage recalls or food-safety matters, maintain the service, comply with law and—with separate consent where required—send offers. We limit collection to information reasonably necessary for these purposes.</p>
-            <h3>Sharing and processors</h3><p>Information may be shared on a need-to-know basis with Razorpay or another configured payment provider, delivery partners, hosting/database providers such as Vercel and Supabase, messaging providers, professional advisers and public authorities where legally required. Each production provider must be contracted and configured with appropriate security and access controls.</p>
+            <h3>Sharing and processors</h3><p>Information may be shared on a need-to-know basis with Shiprocket, which operates the checkout and collects payment and delivery details, other delivery partners, hosting/database providers such as Vercel and Supabase, messaging providers, professional advisers and public authorities where legally required. Each production provider must be contracted and configured with appropriate security and access controls.</p>
             <h3>Retention, security and choices</h3><p>We retain data only for the order, legal, accounting, fraud-prevention and dispute periods applicable to it, then delete or anonymise it where feasible. We use role-based access, encryption in transit, restricted production credentials, logging and backups appropriate to the risk. No internet service is completely secure. You may request access, correction, erasure or withdrawal of optional consent, subject to legal retention and transaction requirements, through the contact below.</p>
             <h3>Cookies</h3><p>Essential storage may keep cart contents, security state and preferences. Analytics or advertising cookies should remain disabled until a consent mechanism and the relevant vendor disclosures are implemented.</p>
           </section>
