@@ -1930,7 +1930,7 @@ function Checkout({ cart, done }: { cart: CartLine[]; done: () => void }) {
           location.href = `/order-success?order_id=${orderData.order_id}`;
         }, 1800);
       } else {
-        setStatus(orderData.error || "Order could not be placed. Try WhatsApp.");
+        setStatus((orderData as Record<string, string>).error || "Order could not be placed. Try WhatsApp.");
       }
       return;
     }
@@ -2373,7 +2373,7 @@ function AdminLogin({ onSuccess }: { onSuccess: () => void }) {
   );
 }
 
-function OrderSuccess({ setView }: { setView: (view: string) => void }) {
+function OrderSuccess({ setView }: { setView: (view: SiteView) => void }) {
   const params = new URLSearchParams(location.search);
   const orderId = params.get("order_id") || "ASHOK-" + Date.now();
   return (
