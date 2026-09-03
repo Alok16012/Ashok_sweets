@@ -3,6 +3,26 @@
   functions = "netlify/functions"
 
 [[redirects]]
+  from = "/api/client/products"
+  to = "/.netlify/functions/products"
+  status = 200
+
+[[redirects]]
+  from = "/api/client/collections"
+  to = "/.netlify/functions/collections"
+  status = 200
+
+[[redirects]]
+  from = "/api/client/collection-products/:splat"
+  to = "/.netlify/functions/collection-products"
+  status = 200
+
+[[redirects]]
+  from = "/api/client/orders"
+  to = "/.netlify/functions/orders"
+  status = 200
+
+[[redirects]]
   from = "/api/*"
   to = "/.netlify/functions/:splat"
   status = 200
