@@ -1,13 +1,13 @@
 /**
  * Client API Helper - Shopify-style e-commerce API
  *
- * Environment variables needed:
- * - VITE_CLIENT_API_BASE_URL: Base URL of the client's API (e.g. https://client-api.example.com/api/v1)
- * - VITE_CLIENT_API_KEY: API key for authentication (if required)
+ * Environment variables (runtime on Netlify / Vercel):
+ * - CLIENT_API_BASE_URL: Base URL of the client's API
+ * - CLIENT_API_KEY: API key for authentication
  */
 
-const API_BASE = (typeof process !== 'undefined' && process.env?.VITE_CLIENT_API_BASE_URL) || "";
-const API_KEY = (typeof process !== 'undefined' && process.env?.VITE_CLIENT_API_KEY) || "";
+const API_BASE = (typeof process !== 'undefined' && process.env?.CLIENT_API_BASE_URL) || "";
+const API_KEY = (typeof process !== 'undefined' && process.env?.CLIENT_API_KEY) || "";
 
 /**
  * Shared fetch wrapper for the client API.
