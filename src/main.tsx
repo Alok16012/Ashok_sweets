@@ -1871,7 +1871,47 @@ function Checkout({ cart, done }: { cart: CartLine[]; done: () => void }) {
         headers: { "content-type": "application/json" },
         body: JSON.stringify(orderPayload),
       });
-      return await orderResponse.json().catch(() => ({}));
+      const orderData = await orderResponse.json().catch(() => ({}));
+      const orderId = orderData.order_id || "ASHOK-" + Date.now();
+
+      // Also create Shiprocket COD shipment
+      try {
+        const shipmentPayload = {
+          order_id: orderId,
+          customer_details: orderPayload.customer_details,
+          items: cart.map((line) => ({
+            variant_id: line.item.id,
+            quantity: line.qty,
+            price: line.item.price,
+            title: line.item.title,
+            sku: line.item.sku,
+          })),
+          coupon_code: applied > 0 ? coupon.toUpperCase() : undefined,
+          discount_amount: applied > 0 ? Math.round((subtotal * applied) / 100) : 0,
+        };
+        const shipmentResponse = await fetch("/api/shiprocket/shipment", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(shipmentPayload),
+        });
+        const shipmentData = await shipmentResponse.json().catch(() => ({}));
+        console.log("[Shiprocket COD] Shipment created:", shipmentData);
+        return {
+          order_id: orderId,
+          shipment_id: shipmentData.shipment_id,
+          tracking_number: shipmentData.tracking_number,
+          courier_name: shipmentData.courier_name,
+          status: shipmentData.success ? "shipped" : "created",
+          timestamp: new Date().toISOString(),
+        };
+      } catch (shipError) {
+        console.warn("[Shiprocket COD] Shipment creation failed:", shipError);
+        return {
+          order_id: orderId,
+          status: "created",
+          timestamp: new Date().toISOString(),
+        };
+      }
     } catch (e) {
       console.error("Direct order error:", e);
       return { order_id: "ASHOK-" + Date.now(), timestamp: new Date().toISOString() };
