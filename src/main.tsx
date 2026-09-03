@@ -1883,10 +1883,34 @@ function Checkout({ cart, done }: { cart: CartLine[]; done: () => void }) {
     }
   };
 
+  const loadRazorpay = (key: string): Promise<boolean> =>
+    new Promise((resolve) => {
+      if (window.Razorpay) {
+        resolve(true);
+        return;
+      }
+      if (document.getElementById("razorpay-script")) {
+        const poll = setInterval(() => {
+          if (window.Razorpay) {
+            clearInterval(poll);
+            resolve(true);
+          }
+        }, 50);
+        setTimeout(() => { clearInterval(poll); resolve(false); }, 5000);
+        return;
+      }
+      const s = document.createElement("script");
+      s.src = "https://checkout.razorpay.com/v1/checkout.js";
+      s.defer = true;
+      s.id = "razorpay-script";
+      s.onload = () => resolve(true);
+      s.onerror = () => resolve(false);
+      document.head.appendChild(s);
+    });
+
   const pay = async () => {
     const key = import.meta.env.VITE_RAZORPAY_KEY_ID;
-    if (!key || !window.Razorpay) {
-      // Test mode: submit order directly to client API
+    if (!key || key === "rzp_test_replace_me") {
       setStatus("Placing your order…");
       const orderData = await submitOrderDirect();
       if (orderData.order_id) {
@@ -1896,6 +1920,18 @@ function Checkout({ cart, done }: { cart: CartLine[]; done: () => void }) {
         }, 1800);
       } else {
         setStatus((orderData as Record<string, string>).error || "Order could not be placed. Try WhatsApp.");
+      }
+      return;
+    }
+    const ready = await loadRazorpay(key);
+    if (!ready) {
+      setStatus("Payment gateway is unavailable. Placing order directly…");
+      const orderData = await submitOrderDirect();
+      if (orderData.order_id) {
+        setStatus(`Order placed! ID: ${orderData.order_id}. Redirecting…`);
+        setTimeout(() => {
+          location.href = `/order-success?order_id=${orderData.order_id}`;
+        }, 1800);
       }
       return;
     }
@@ -1912,7 +1948,7 @@ function Checkout({ cart, done }: { cart: CartLine[]; done: () => void }) {
       });
       if (!response.ok) throw new Error("Order service unavailable");
       const order = await response.json();
-      new window.Razorpay({
+      new window.Razorpay!({
         key,
         amount: total * 100,
         currency: "INR",
