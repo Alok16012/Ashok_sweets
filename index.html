@@ -4,9 +4,13 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#b80819" />
-    <meta name="description" content="Shop fresh Indian sweets, celebration boxes and gifts from Nakhye’s Ashok Sweets, Dombivli." />
-    <title>Nakhye’s Ashok Sweets · Dombivli</title>
-    <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+    <meta name="description" content="Shop fresh Indian sweets, celebration boxes and gifts from Nakhye's Ashok Sweets, Dombivli." />
+    <title>Nakhye's Ashok Sweets · Dombivli</title>
+    <script>
+      // Only expose Razorpay config if a real key exists.
+      // Vite replaces import.meta.env at build time; use a flag instead of optional chaining here.
+      window.__APP_FLAGS__ = window.__APP_FLAGS__ || {};
+    </script>
   </head>
   <body>
     <div id="root"></div>
