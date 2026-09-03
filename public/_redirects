@@ -1,4 +1,16 @@
-# Netlify redirects for client API
+# Netlify redirects. Vite copies this file into dist/ at build time.
+#
+# Keep this list in sync with netlify.toml — when a path is missing here it
+# falls through to the /api/* catch-all and rewrites to a function name that
+# does not exist, which surfaces as a bare 404.
+#
+# Specific rules must stay above the /* fallback.
+
+# Checkout (Shiprocket)
+/api/checkout/token /.netlify/functions/checkout-token 200
+/api/checkout/status /.netlify/functions/checkout-status 200
+
+# Catalog
 /api/client/products /.netlify/functions/products 200
 /api/client/collections /.netlify/functions/collections 200
 /api/client/collection-products/:splat /.netlify/functions/collection-products 200
